@@ -1,0 +1,2417 @@
+package com.veilframe.app
+
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.res.Configuration
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.util.Log
+import android.os.Bundle
+import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.veilframe.app.databinding.ActivityMainBinding
+import com.veilframe.app.databinding.LayoutBackgroundRemoverBinding
+import com.veilframe.app.databinding.LayoutDocumentScannerBinding
+import com.veilframe.app.databinding.LayoutImageUpscalerBinding
+import com.veilframe.app.databinding.LayoutMotionLabBinding
+import com.veilframe.app.databinding.LayoutProvenanceBinding
+import com.veilframe.app.logging.ConsoleLogController
+import com.veilframe.app.markdown.MarkdownViewerController
+import com.veilframe.app.document.DocumentScannerController
+import com.veilframe.app.media.BackgroundRemoverController
+import com.veilframe.app.media.MotionLabController
+import com.veilframe.app.media.ImageQualityController
+import com.veilframe.app.media.ImageStudioController
+import com.veilframe.app.media.ProvenanceController
+import com.veilframe.app.media.SafDestinationManager
+import com.veilframe.app.media.VideoPlayerController
+import com.veilframe.app.media.VideoStudioController
+import com.veilframe.app.navigation.MainNavigationController
+import com.veilframe.app.navigation.ScreenState
+import com.veilframe.app.navigation.WorkspaceRoute
+import com.veilframe.app.navigation.WorkspaceCategory
+import com.veilframe.app.ui.picker.SharedSourcePickerSheet
+import com.veilframe.app.upscale.ui.ImageUpscalerController
+import com.veilframe.app.workspace.WorkspaceHost
+import com.veilframe.app.storage.CreateDocumentWithMime
+import com.veilframe.app.storage.SafStorageManager
+import com.veilframe.app.tools.JobState
+import com.veilframe.app.tools.ToolExecutionController
+import com.veilframe.app.tools.ToolMode
+import com.veilframe.app.tools.ToolSessionManager
+import com.veilframe.app.ui.motion.ExpressiveMotion
+import com.veilframe.app.ui.motion.MorphDialogController
+import com.veilframe.app.ui.motion.VeilFrameInteraction
+import com.veilframe.app.updates.AppUpdateManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.Locale
+
+/**
+ * VeilFrame Mobile Hub — Android Vertical Forensics & AI Bundler.
+ * Orchestrates Home Dashboard, 4 Dedicated Tool Workflows (AI Bundler, Video Sanitizer,
+ * Image Cleaner, Folder Scanner), and 2 Interactive Media Studios (Image Studio, Video Studio).
+ */
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+
+    // Modular Sub-Controllers
+    private lateinit var safStorageManager: SafStorageManager
+    private lateinit var consoleLogController: ConsoleLogController
+    private lateinit var workspaceHost: WorkspaceHost
+    private lateinit var navigationController: MainNavigationController
+    private lateinit var toolSessionManager: ToolSessionManager
+    private lateinit var toolExecutionController: ToolExecutionController
+    private lateinit var appUpdateManager: AppUpdateManager
+
+    // Dedicated Media Studio Controllers
+    private lateinit var safDestinationManager: SafDestinationManager
+    private lateinit var videoPlayerController: VideoPlayerController
+    private lateinit var imageStudioController: ImageStudioController
+    private lateinit var videoStudioController: VideoStudioController
+    private lateinit var imageUpscalerController: ImageUpscalerController
+    private lateinit var markdownViewerController: MarkdownViewerController
+    private lateinit var docScannerController: DocumentScannerController
+    private lateinit var backgroundRemoverController: BackgroundRemoverController
+    private lateinit var motionLabController: MotionLabController
+    private lateinit var imageQualityController: ImageQualityController
+    private lateinit var provenanceController: ProvenanceController
+    private var pendingImgStudioExportFile: File? = null
+    private var pendingVidStudioExportFile: File? = null
+    private var pendingDocScannerExportFile: File? = null
+    private var pendingBgRemoverExportFile: File? = null
+    private var isConsoleExpanded: Boolean = false
+    private var backClearTimerJob: Job? = null
+
+    // Markdown file picker launcher
+    private val markdownPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val name = safStorageManager.getDisplayName(uri)?.lowercase(Locale.ROOT) ?: ""
+            if (name.isNotEmpty() && !name.endsWith(".md") && !name.endsWith(".markdown")) {
+                Toast.makeText(this, "Please select a valid Markdown (.md) file", Toast.LENGTH_SHORT).show()
+            } else {
+                safStorageManager.persistReadPermission(uri)
+                openMarkdownViewer(uri)
+            }
+        }
+    }
+
+    private var pendingMarkdownSaveContent: String? = null
+
+    // Markdown Save As export launcher (Storage Access Framework)
+    private val markdownSaveAsLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/markdown")
+    ) { destUri ->
+        val content = pendingMarkdownSaveContent
+        if (destUri != null && content != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val success = try {
+                    contentResolver.openOutputStream(destUri, "wt")?.use { out ->
+                        out.write(content.toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    }
+                    true
+                } catch (e: Exception) {
+                    Log.e("VeilFrame", "Save As write failed: ${e.message}", e)
+                    false
+                }
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        val name = DocumentFile.fromSingleUri(this@MainActivity, destUri)?.name ?: "Document.md"
+                        markdownViewerController.onDocumentSavedAs(destUri, name)
+                    } else {
+                        Toast.makeText(this@MainActivity, "Save As write failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+        pendingMarkdownSaveContent = null
+    }
+
+    // Multi-format export launcher (Storage Access Framework)
+    private val exportDocumentLauncher = registerForActivityResult(
+        CreateDocumentWithMime()
+    ) { destinationUri ->
+        if (destinationUri != null) {
+            val sourceFile = toolSessionManager.currentState.lastGeneratedFile
+            if (sourceFile != null && sourceFile.exists()) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val success = safStorageManager.copyFileToUri(sourceFile, destinationUri)
+                    withContext(Dispatchers.Main) {
+                        if (success) {
+                            consoleLogController.log("[EXPORT] Artifact written to storage: ${destinationUri.lastPathSegment ?: destinationUri.path}")
+                            Toast.makeText(this@MainActivity, "Saved to device storage", Toast.LENGTH_LONG).show()
+                        } else {
+                            consoleLogController.log("[ERR] Failed to write exported file to destination.")
+                            Toast.makeText(this@MainActivity, "Export write failed", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Media Studio SAF Export Launchers
+    private val imgStudioExportLauncher = registerForActivityResult(
+        CreateDocumentWithMime()
+    ) { destUri ->
+        val file = pendingImgStudioExportFile
+        pendingImgStudioExportFile = null
+        if (destUri != null && file != null && file.exists()) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val ok = safStorageManager.copyFileToUri(file, destUri)
+                withContext(Dispatchers.Main) {
+                    if (ok) Toast.makeText(this@MainActivity, "Image saved to device storage", Toast.LENGTH_LONG).show()
+                    else Toast.makeText(this@MainActivity, "Export failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private val vidStudioExportLauncher = registerForActivityResult(
+        CreateDocumentWithMime()
+    ) { destUri ->
+        val file = pendingVidStudioExportFile
+        pendingVidStudioExportFile = null
+        if (destUri != null && file != null && file.exists()) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val ok = safStorageManager.copyFileToUri(file, destUri)
+                withContext(Dispatchers.Main) {
+                    if (ok) Toast.makeText(this@MainActivity, "Video saved to device storage", Toast.LENGTH_LONG).show()
+                    else Toast.makeText(this@MainActivity, "Export failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Studio SAF Pickers
+    private val imgStudioPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            imageStudioController.handleImagesSelected(uris)
+        }
+    }
+
+    private val imgStudioAddMoreLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            imageStudioController.handleImagesAdded(uris)
+        }
+    }
+
+    private val vidStudioPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            videoStudioController.handleVideosSelected(uris)
+        }
+    }
+
+    private val motionLabPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            workspaceHost.getOrInflateMotionLab()
+            motionLabController.setSource(uri)
+        }
+    }
+
+    private val vidStudioAddMoreLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            videoStudioController.handleVideosAdded(uris)
+        }
+    }
+
+    private val imgFolderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            imageStudioController.onDestinationFolderSelected(uri)
+        }
+    }
+
+    private val vidFolderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            videoStudioController.onDestinationFolderSelected(uri)
+        }
+    }
+
+    private val imgUpscalerPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            workspaceHost.getOrInflateImageUpscaler()
+            imageUpscalerController.handleImageSelected(uri)
+        }
+    }
+
+    private val modelPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            workspaceHost.getOrInflateImageUpscaler()
+            imageUpscalerController.handleCustomModelImport(uri)
+        }
+    }
+
+    // Dedicated Tools SAF and Photo Picker Activity Result Launchers
+    private val visualMediaPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            handleSingleFileSelected(uri)
+        }
+    }
+
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            safStorageManager.persistReadPermission(uri)
+            handleSingleFileSelected(uri)
+        }
+    }
+
+    private val folderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            safStorageManager.persistReadWritePermission(uri)
+            handleFolderSelected(uri)
+        }
+    }
+
+    // Dedicated Document Scanner Activity Result Launchers
+    private val docScannerCameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            workspaceHost.getOrInflateDocScanner()
+            docScannerController.handleCameraPhotoCaptured(bitmap)
+        }
+    }
+
+    private val docScannerPhotosLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            workspaceHost.getOrInflateDocScanner()
+            docScannerController.handlePhotosImported(uris)
+        }
+    }
+
+    private val docScannerExportLauncher = registerForActivityResult(
+        CreateDocumentWithMime()
+    ) { destUri ->
+        val file = pendingDocScannerExportFile
+        pendingDocScannerExportFile = null
+        if (destUri != null && file != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val ok = safStorageManager.copyFileToUri(file, destUri)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        Toast.makeText(this@MainActivity, "PDF saved to storage", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Failed to save PDF to storage", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // Dedicated Background Remover Activity Result Launchers
+    private val bgRemoverPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            workspaceHost.getOrInflateBackgroundRemover()
+            backgroundRemoverController.handleImageSelected(uri)
+        }
+    }
+
+    private val bgRemoverExportLauncher = registerForActivityResult(
+        CreateDocumentWithMime()
+    ) { destUri ->
+        val file = pendingBgRemoverExportFile
+        pendingBgRemoverExportFile = null
+        if (destUri != null && file != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val ok = safStorageManager.copyFileToUri(file, destUri)
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        Toast.makeText(this@MainActivity, "PNG cutout saved to storage", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Failed to save PNG cutout to storage", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // Dedicated Image Quality Activity Result Launcher
+    private val qualityPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            imageQualityController.handleImageSelected(uri)
+        }
+    }
+
+    // Dedicated Provenance Activity Result Launcher
+    private val provenancePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            safStorageManager.persistReadPermission(uri)
+            workspaceHost.getOrInflateProvenance()
+            provenanceController.handleFileSelected(uri)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        com.veilframe.app.settings.ThemeSettingsManager.applyActivityTheme(this)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        com.veilframe.app.settings.ThemeSettingsManager.applyTypography(this)
+        val prefs = getSharedPreferences("veilframe_prefs", Context.MODE_PRIVATE)
+
+        // Restore cached changelog if available
+        val cachedTag = prefs.getString("cached_changelog_tag", null)
+        val cachedChangelog = prefs.getString("cached_changelog", null)
+        if (!cachedTag.isNullOrEmpty() && !cachedChangelog.isNullOrEmpty()) {
+            binding.tvWhatsNewHeader.text = "WHAT'S NEW IN $cachedTag"
+            binding.tvWhatsNewContent.text = cachedChangelog
+        }
+
+        // System insets handling: status bar top inset for AppBarLayout + navigation bar bottom inset for action dock + settings panel + bottom navigation / rail
+        ViewCompat.setOnApplyWindowInsetsListener(binding.rootCoordinator) { _, insets ->
+            val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val navBarLeft = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).left
+            binding.appBarLayout.setPadding(0, statusBarTop, 0, 0)
+            binding.containerSettings.setPadding(0, statusBarTop, 0, navBarBottom)
+            val layoutParams = binding.cardCleanerActionDock.layoutParams as? android.view.ViewGroup.MarginLayoutParams
+            if (layoutParams != null) {
+                layoutParams.bottomMargin = navBarBottom + (16 * resources.displayMetrics.density).toInt()
+                binding.cardCleanerActionDock.layoutParams = layoutParams
+            }
+            binding.bottomNavigation.setPadding(0, 0, 0, navBarBottom)
+            binding.navigationRail.setPadding(navBarLeft, statusBarTop, 0, navBarBottom)
+
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBarRight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).right
+
+            // Additive Inset Architecture (P0 Architectural Inset Resolution):
+            // 1. Workspaces scrolled under AppBarLayout via appbar_scrolling_view_behavior:
+            //    CoordinatorLayout + AppBarLayout already positions these below the status bar.
+            //    Apply SCROLLED_APPBAR (padTop = false) to prevent double top status-bar gaps,
+            //    while additively preserving XML base bottom clearances (e.g. 160dp on scrollTool).
+            listOf(
+                binding.scrollTool,
+                binding.layoutToolsCatalogue.root,
+                binding.layoutLibrary.root
+            ).forEach { root ->
+                com.veilframe.app.ui.insets.WorkspaceInsets.apply(
+                    root = root,
+                    statusBarTop = statusBarTop,
+                    navBarBottom = navBarBottom,
+                    imeBottom = imeBottom,
+                    navBarLeft = navBarLeft,
+                    navBarRight = navBarRight,
+                    contract = com.veilframe.app.ui.insets.WorkspaceInsets.SCROLLED_APPBAR
+                )
+            }
+
+            // 2. Full-screen / custom-toolbar workspaces spanning full window:
+            //    Apply DEFAULT (padTop = true, padBottom = true) additively to initial padding.
+            listOf(
+                binding.layoutImageStudio.root,
+                binding.layoutVideoStudio.root,
+                binding.layoutMarkdownViewer.root,
+                binding.layoutImageQuality.root,
+                binding.fragmentQrStudio
+            ).forEach { root ->
+                com.veilframe.app.ui.insets.WorkspaceInsets.apply(
+                    root = root,
+                    statusBarTop = statusBarTop,
+                    navBarBottom = navBarBottom,
+                    imeBottom = imeBottom,
+                    navBarLeft = navBarLeft,
+                    navBarRight = navBarRight,
+                    contract = com.veilframe.app.ui.insets.WorkspaceInsets.DEFAULT
+                )
+            }
+
+            // 3. Secondary offline workspaces (lazy-inflated via WorkspaceHost):
+            workspaceHost.updateInsets(
+                statusBarTop = statusBarTop,
+                navBarBottom = navBarBottom,
+                imeBottom = imeBottom,
+                navBarLeft = navBarLeft,
+                navBarRight = navBarRight
+            )
+            insets
+        }
+
+        initSubControllers()
+        initStudioWorkspaces()
+        setupListeners()
+        VeilFrameInteraction.bindWorkspace(binding.root)
+
+        binding.tvVersionBadge.text = "v${BuildConfig.VERSION_NAME}"
+        binding.tvUpdateStatus.text = "Installed: v${BuildConfig.VERSION_NAME} • Local Engine"
+
+        consoleLogController.log("[SYS] Initialized VeilFrame ${BuildConfig.VERSION_NAME} Native Core Runtime")
+        consoleLogController.log("[SYS] Native Media3, FFmpegKit 8.1.7, and AndroidX Privacy Engine active.")
+
+        if (savedInstanceState != null) {
+            restoreInstanceState(savedInstanceState)
+        } else {
+            navigationController.showHomeScreen()
+            if (pendingSeamlessSettingsRestore) {
+                val scrollY = pendingSeamlessSettingsScrollY
+                pendingSeamlessSettingsRestore = false
+                pendingSeamlessSettingsScrollY = 0
+                binding.rootCoordinator.post {
+                    openSettingsOverlay(animate = false, restoreScrollY = scrollY)
+                }
+            }
+        }
+
+        // Asynchronous, non-blocking update check on launch
+        appUpdateManager.checkForUpdates(isUserInitiated = false)
+
+        handleIncomingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action
+        val type = intent.type ?: ""
+        val uri: Uri? = if (action == Intent.ACTION_SEND) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            } ?: intent.data
+        } else if (action == Intent.ACTION_VIEW) {
+            intent.data
+        } else {
+            null
+        }
+
+        if (uri != null) {
+            safStorageManager.persistReadPermission(uri)
+            val displayName = DocumentFile.fromSingleUri(this, uri)?.name ?: uri.lastPathSegment ?: ""
+            val nameLower = displayName.lowercase(Locale.ROOT)
+            val isMarkdown = nameLower.endsWith(".md") ||
+                    nameLower.endsWith(".markdown") ||
+                    nameLower.endsWith(".mdown") ||
+                    nameLower.endsWith(".mkdn") ||
+                    type == "text/markdown" ||
+                    (type == "text/plain" && (nameLower.endsWith(".md") || nameLower.endsWith(".markdown")))
+
+            if (isMarkdown) {
+                openMarkdownViewer(uri, displayName)
+            } else if (type.startsWith("video/") || nameLower.endsWith(".mp4") || nameLower.endsWith(".webm") || nameLower.endsWith(".mkv") || nameLower.endsWith(".mov") || nameLower.endsWith(".avi")) {
+                openVideoStudio()
+                videoStudioController.handleVideoSelected(uri)
+            } else if (type.startsWith("image/") || nameLower.endsWith(".jpg") || nameLower.endsWith(".jpeg") || nameLower.endsWith(".png") || nameLower.endsWith(".webp") || nameLower.endsWith(".heic") || nameLower.endsWith(".heif") || nameLower.endsWith(".avif") || nameLower.endsWith(".bmp") || nameLower.endsWith(".tiff") || nameLower.endsWith(".tif") || nameLower.endsWith(".gif")) {
+                openImageStudio()
+                imageStudioController.handleImageSelected(uri)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        appUpdateManager.onResume()
+        updateHeroBanner()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        pauseVideoPlayback()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        workspaceHost.pause()
+        if (::docScannerController.isInitialized) {
+            docScannerController.closeCameraViewfinder()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        workspaceHost.onDestroy()
+        appUpdateManager.onDestroy()
+        if (::docScannerController.isInitialized) {
+            docScannerController.release()
+        }
+        if (::motionLabController.isInitialized) {
+            motionLabController.cancel()
+        }
+        if (::imageStudioController.isInitialized) {
+            imageStudioController.release()
+        }
+        if (::videoStudioController.isInitialized) {
+            videoStudioController.release()
+        }
+        if (::videoPlayerController.isInitialized) {
+            videoPlayerController.release()
+        }
+        if (::imageUpscalerController.isInitialized) {
+            imageUpscalerController.release()
+        }
+        if (::markdownViewerController.isInitialized) {
+            markdownViewerController.clear()
+        }
+        if (::backgroundRemoverController.isInitialized) {
+            backgroundRemoverController.cleanup()
+        }
+    }
+
+    private fun initSubControllers() {
+        safStorageManager = SafStorageManager(this)
+
+        consoleLogController = ConsoleLogController(
+            context = this,
+            tvConsoleLog = binding.tvConsoleLog,
+            scrollConsole = binding.scrollConsole,
+            btnCopyLogs = binding.btnCopyLogs,
+            btnClearLogs = binding.btnClearLogs,
+            btnExpandLogs = binding.btnExpandLogs,
+            onLogUpdated = { newLog ->
+                toolSessionManager.currentState.consoleLogs = newLog
+            }
+        )
+        consoleLogController.init()
+
+        workspaceHost = WorkspaceHost(
+            binding = binding,
+            onImageUpscalerInflated = { upscalerBinding ->
+                initImageUpscaler(upscalerBinding)
+            },
+            onDocScannerInflated = { docBinding ->
+                initDocScanner(docBinding)
+            },
+            onBackgroundRemoverInflated = { bgBinding ->
+                initBackgroundRemover(bgBinding)
+            },
+            onMotionLabInflated = { motionBinding ->
+                initMotionLab(motionBinding)
+            },
+            onProvenanceInflated = { provBinding ->
+                initProvenance(provBinding)
+            }
+        )
+
+        navigationController = MainNavigationController(
+            activity = this,
+            binding = binding,
+            workspaceHost = workspaceHost,
+            onSaveActiveToolState = { toolSessionManager.saveCurrentToolState() },
+            onPauseVideoPlayback = { pauseVideoPlayback() },
+            onHomeScreenEntered = { scheduleBackClearWork() },
+            onMarkdownBackPressed = {
+                if (::markdownViewerController.isInitialized) {
+                    markdownViewerController.handleBackPressed()
+                } else {
+                    false
+                }
+            },
+            onLibraryScreenEntered = { refreshLibrary() }
+        )
+        navigationController.init()
+
+        toolSessionManager = ToolSessionManager(
+            activity = this,
+            binding = binding,
+            safStorageManager = safStorageManager,
+            onLog = { msg -> consoleLogController.log(msg) },
+            onOpenFilePicker = { openFilePickerForCurrentTool() }
+        )
+        toolSessionManager.init()
+
+        toolExecutionController = ToolExecutionController(
+            activity = this,
+            binding = binding,
+            sessionManager = toolSessionManager,
+            safStorageManager = safStorageManager,
+            scope = lifecycleScope,
+            onOpenFilePicker = { openFilePickerForCurrentTool() },
+            onOpenFolderPicker = { folderPickerLauncher.launch(null) },
+            onLog = { msg -> consoleLogController.log(msg) },
+            getImageStudioController = { if (::imageStudioController.isInitialized) imageStudioController else null },
+            getVideoStudioController = { if (::videoStudioController.isInitialized) videoStudioController else null }
+        )
+        setupToolScrollDockBehavior()
+
+        appUpdateManager = AppUpdateManager(
+            activity = this,
+            binding = binding,
+            safStorageManager = safStorageManager,
+            scope = lifecycleScope,
+            onLog = { msg -> consoleLogController.log(msg) }
+        )
+
+        markdownViewerController = MarkdownViewerController(
+            activity = this,
+            binding = binding.layoutMarkdownViewer,
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            },
+            onOpenMarkdownFileRequest = {
+                markdownPickerLauncher.launch(arrayOf("text/markdown", "text/x-markdown"))
+            },
+            onSaveAsMarkdownRequest = { suggestedName, content ->
+                pendingMarkdownSaveContent = content
+                markdownSaveAsLauncher.launch(suggestedName)
+            }
+        )
+        markdownViewerController.init()
+    }
+
+    private fun initStudioWorkspaces() {
+        safDestinationManager = SafDestinationManager(this)
+        videoPlayerController = VideoPlayerController(
+            context = this,
+            textureView = binding.layoutVideoStudio.videoTextureView,
+            scope = lifecycleScope
+        )
+
+        imageStudioController = ImageStudioController(
+            activity = this,
+            binding = binding.layoutImageStudio,
+            safManager = safDestinationManager,
+            scope = lifecycleScope,
+            onPickImageRequest = { imgStudioPickerLauncher.launch("image/*") },
+            onAddMoreImageRequest = { imgStudioAddMoreLauncher.launch("image/*") },
+            onPickFolderRequest = { imgFolderPickerLauncher.launch(null) },
+            onExportFileRequest = { file ->
+                pendingImgStudioExportFile = file
+                val mime = safStorageManager.getExportMimeType(file)
+                imgStudioExportLauncher.launch(file.name to mime)
+            },
+            onShareFileRequest = { file, mime ->
+                shareStudioFile(file, mime)
+            },
+            onNavigateHome = {
+                navigationController.navigateBackFromWorkspace()
+            },
+            onOpenModelManager = {
+                workspaceHost.getOrInflateImageUpscaler()
+                imageUpscalerController.showModelManagerDialog()
+            }
+        )
+
+        videoStudioController = VideoStudioController(
+            activity = this,
+            binding = binding.layoutVideoStudio,
+            playerController = videoPlayerController,
+            safManager = safDestinationManager,
+            scope = lifecycleScope,
+            onPickVideoRequest = { vidStudioPickerLauncher.launch("video/*") },
+            onAddMoreVideoRequest = { vidStudioAddMoreLauncher.launch("video/*") },
+            onPickFolderRequest = { vidFolderPickerLauncher.launch(null) },
+            onExportFileRequest = { file ->
+                pendingVidStudioExportFile = file
+                val mime = safStorageManager.getExportMimeType(file)
+                vidStudioExportLauncher.launch(file.name to mime)
+            },
+            onShareFileRequest = { file, mime ->
+                shareStudioFile(file, mime)
+            },
+            onNavigateHome = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        )
+
+        imageStudioController.initWorkspace()
+        videoStudioController.initWorkspace()
+
+        imageQualityController = ImageQualityController(
+            activity = this,
+            binding = binding.layoutImageQuality,
+            scope = lifecycleScope,
+            onPickImageRequest = { qualityPickerLauncher.launch("image/*") },
+            onShareReportRequest = { reportText ->
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "VeilFrame Image Quality Report")
+                    putExtra(Intent.EXTRA_TEXT, reportText)
+                }
+                startActivity(Intent.createChooser(sendIntent, "Share Quality Report"))
+            },
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        ).apply { init() }
+    }
+
+    private fun initImageUpscaler(upscalerBinding: LayoutImageUpscalerBinding) {
+        imageUpscalerController = ImageUpscalerController(
+            activity = this,
+            upscalerBinding = upscalerBinding,
+            onBackRequested = {
+                navigationController.navigateBackFromWorkspace()
+            },
+            onPickImageRequested = { imgUpscalerPickerLauncher.launch("image/*") },
+            onLog = { msg -> consoleLogController.log(msg) }
+        ).apply {
+            onImportCustomModelRequested = { modelPickerLauncher.launch("*/*") }
+        }
+        imageUpscalerController.init()
+    }
+
+    private fun initDocScanner(docBinding: LayoutDocumentScannerBinding) {
+        docScannerController = DocumentScannerController(
+            activity = this,
+            binding = docBinding,
+            safStorageManager = safStorageManager,
+            scope = lifecycleScope,
+            onTakePhotoRequest = { docScannerController.openCameraViewfinder() },
+            onChoosePhotosRequest = { docScannerPhotosLauncher.launch("image/*") },
+            onExportFileRequest = { file, mime ->
+                pendingDocScannerExportFile = file
+                docScannerExportLauncher.launch(file.name to mime)
+            },
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        ).apply { init() }
+    }
+
+    private fun initMotionLab(motionBinding: LayoutMotionLabBinding) {
+        motionLabController = MotionLabController(
+            activity = this,
+            binding = motionBinding,
+            scope = lifecycleScope,
+            onPickVideoRequest = { motionLabPickerLauncher.launch(arrayOf("video/*")) },
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        )
+    }
+
+    private fun initBackgroundRemover(bgBinding: LayoutBackgroundRemoverBinding) {
+        backgroundRemoverController = BackgroundRemoverController(
+            activity = this,
+            binding = bgBinding,
+            scope = lifecycleScope,
+            onPickImageRequest = { bgRemoverPickerLauncher.launch("image/*") },
+            onExportPngRequest = { file ->
+                pendingBgRemoverExportFile = file
+                val mime = safStorageManager.getExportMimeType(file)
+                bgRemoverExportLauncher.launch(file.name to mime)
+            },
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        ).apply { init() }
+    }
+
+    private fun initProvenance(provBinding: LayoutProvenanceBinding) {
+        provenanceController = ProvenanceController(
+            activity = this,
+            binding = provBinding,
+            safStorageManager = safStorageManager,
+            scope = lifecycleScope,
+            onPickFileRequest = { provenancePickerLauncher.launch(arrayOf("*/*")) },
+            onNavigateBack = {
+                navigationController.navigateBackFromWorkspace()
+            }
+        ).apply { init() }
+    }
+
+    private fun setupListeners() {
+        // Theme & Appearance actions
+        binding.btnToggleTheme.setOnClickListener { toggleTheme() }
+        binding.btnToolToggleTheme.setOnClickListener { toggleTheme() }
+        binding.btnSettings.setOnClickListener { openSettingsOverlay() }
+        binding.btnToolSettings.setOnClickListener { openSettingsOverlay() }
+
+        // Material 3 Expressive Motion: tactile touch bounce on all primary interactive views
+        val interactiveBounceViews = listOf(
+            binding.btnToggleTheme,
+            binding.btnToolToggleTheme,
+            binding.btnSettings,
+            binding.btnToolSettings,
+            binding.cardToolAi,
+            binding.cardToolVideo,
+            binding.cardToolImage,
+            binding.cardToolFolder,
+            binding.cardToolImageStudio,
+            binding.cardToolVideoStudio,
+            binding.cardToolImageUpscaler,
+            binding.cardToolMarkdownViewer,
+            binding.btnCheckUpdates,
+            binding.btnRepairApp,
+            binding.btnLinkGithub,
+            binding.btnLinkDocs,
+            binding.btnLinkChangelog,
+            binding.btnLinkAbout,
+            binding.btnPickFolder,
+            binding.btnPickFile,
+            binding.btnClearTarget,
+            binding.btnChangeTarget,
+            binding.btnToggleConsole,
+            binding.btnExecute,
+            binding.btnExportResult,
+            binding.btnShareResult,
+            binding.btnResultSave,
+            binding.btnResultShare,
+            binding.btnResultPreview,
+            binding.cardHomeDocScanner,
+            binding.cardHomeBgRemover,
+            binding.cardHomeMotionLab,
+            binding.cardHomeImageQuality,
+            binding.cardHomeProvenance,
+            binding.cardHomeDiagnostics
+        )
+        interactiveBounceViews.forEach { ExpressiveMotion.applyTouchBounce(it) }
+
+        // Home Dashboard Tool Cards - DISTINCT CLEANER WORKFLOWS
+        binding.cardToolAi.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolAi
+            openTool(ToolMode.AI_BUNDLE)
+        }
+
+        binding.cardToolVideo.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolVideo
+            openTool(ToolMode.VIDEO_CLEANER) // Dedicated Video Sanitizer
+        }
+
+        binding.cardToolImage.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolImage
+            openTool(ToolMode.IMAGE_CLEANER) // Dedicated Image Cleaner
+        }
+
+        binding.cardToolFolder.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolFolder
+            openTool(ToolMode.FOLDER_SCANNER)
+        }
+
+        // Image Studio & Video Studio Dashboard Cards - DISTINCT STUDIO WORKFLOWS
+        binding.cardToolImageStudio.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolImageStudio
+            openImageStudio()
+        }
+
+        binding.cardToolVideoStudio.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolVideoStudio
+            openVideoStudio()
+        }
+
+        binding.cardToolImageUpscaler.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolImageUpscaler
+            openImageUpscaler()
+        }
+
+        binding.cardToolQr.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolQr
+            openQrStudio()
+        }
+
+        updateHeroBanner()
+
+        binding.cardHomeDocScanner.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHomeDocScanner
+            openDocumentScanner()
+        }
+
+        binding.cardHomeBgRemover.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHomeBgRemover
+            openBackgroundRemover()
+        }
+
+        binding.cardHomeMotionLab.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHomeMotionLab
+            openMotionLab()
+        }
+
+        binding.cardHomeImageQuality.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHomeImageQuality
+            openImageQuality()
+        }
+
+        binding.cardHomeProvenance.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHomeProvenance
+            openProvenance()
+        }
+
+        binding.cardHomeDiagnostics.setOnClickListener {
+            showDiagnosticsDialog()
+        }
+
+        // Tools Catalogue Workspace Card Clicks (All 13 Canonical Workspaces)
+        binding.layoutToolsCatalogue.cardToolImageStudio.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolImageStudio; openImageStudio() }
+        binding.layoutToolsCatalogue.cardToolVideoStudio.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolVideoStudio; openVideoStudio() }
+        binding.layoutToolsCatalogue.cardToolQrStudio.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolQrStudio; openQrStudio() }
+        binding.layoutToolsCatalogue.cardToolDocScanner.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolDocScanner; openDocumentScanner() }
+        binding.layoutToolsCatalogue.cardToolBgRemover.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolBgRemover; openBackgroundRemover() }
+        binding.layoutToolsCatalogue.cardToolMotionLab.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolMotionLab; openMotionLab() }
+        binding.layoutToolsCatalogue.cardToolAiUpscaler.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolAiUpscaler; openImageUpscaler() }
+        binding.layoutToolsCatalogue.cardToolPrivacyScrubber.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolPrivacyScrubber; openTool(ToolMode.IMAGE_CLEANER) }
+        binding.layoutToolsCatalogue.cardToolVideoCleaner.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolVideoCleaner; openTool(ToolMode.VIDEO_CLEANER) }
+        binding.layoutToolsCatalogue.cardToolImageQuality.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolImageQuality; openImageQuality() }
+        binding.layoutToolsCatalogue.cardToolFolderAnalyzer.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolFolderAnalyzer; openTool(ToolMode.FOLDER_SCANNER) }
+        binding.layoutToolsCatalogue.cardToolAiBundler.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolAiBundler; openTool(ToolMode.AI_BUNDLE) }
+        binding.layoutToolsCatalogue.cardToolMarkdownStudio.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolMarkdownStudio
+            showMarkdownStudioEntryDialog()
+        }
+        binding.layoutToolsCatalogue.cardToolProvenance.setOnClickListener { com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.layoutToolsCatalogue.cardToolProvenance; openProvenance() }
+
+        // Library Explore Button & Filters
+        binding.layoutLibrary.btnLibraryExploreTools.setOnClickListener {
+            navigationController.showToolsScreen()
+        }
+        binding.layoutLibrary.chipGroupLibraryFilter.setOnCheckedStateChangeListener { _, _ ->
+            refreshLibrary()
+        }
+
+        // Search & Category Filters in Tools Catalogue
+        setupToolsCatalogueFiltering()
+
+        // In-App Updates & Repair Button
+        binding.btnCheckUpdates.setOnClickListener {
+            appUpdateManager.checkForUpdates(isUserInitiated = true)
+        }
+        binding.btnRepairApp.setOnClickListener {
+            appUpdateManager.repairApp()
+        }
+
+        // What's New Collapsible Header
+        binding.layoutWhatsNewHeader.setOnClickListener {
+            val isCurrentlyVisible = binding.cardWhatsNew.visibility == View.VISIBLE
+            if (isCurrentlyVisible) {
+                binding.cardWhatsNew.visibility = View.GONE
+                binding.ivWhatsNewChevron.animate().rotation(0f).setDuration(200).start()
+            } else {
+                binding.cardWhatsNew.visibility = View.VISIBLE
+                binding.ivWhatsNewChevron.animate().rotation(180f).setDuration(200).start()
+            }
+        }
+
+        // External Links
+        binding.btnLinkGithub.setOnClickListener { openWebUrl("https://github.com/sahir247/VeilFrame") }
+        binding.btnLinkDocs.setOnClickListener { openWebUrl("https://github.com/sahir247/VeilFrame#readme") }
+        binding.btnLinkChangelog.setOnClickListener { openWebUrl("https://github.com/sahir247/VeilFrame/blob/main/RELEASE_NOTES.md") }
+        binding.btnLinkAbout.setOnClickListener { showAboutDialog() }
+
+        // Target Pickers inside Tool
+        binding.btnPickFolder.setOnClickListener { folderPickerLauncher.launch(null) }
+        binding.btnPickFile.setOnClickListener { openFilePickerForCurrentTool() }
+        binding.btnClearTarget.setOnClickListener { toolSessionManager.clearSelectedTarget(logMessage = true) }
+        binding.btnChangeTarget.setOnClickListener { openFilePickerForCurrentTool() }
+
+        // Execution Monitor Console Toggle
+        binding.btnToggleConsole.setOnClickListener {
+            isConsoleExpanded = !isConsoleExpanded
+            binding.layoutConsoleBody.visibility = if (isConsoleExpanded) View.VISIBLE else View.GONE
+            binding.btnToggleConsole.setIconResource(
+                if (isConsoleExpanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more
+            )
+        }
+
+        // Markdown Viewer Dashboard Card (Open Existing or Create Blank)
+        binding.cardToolMarkdownViewer.setOnClickListener {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardToolMarkdownViewer
+            showMarkdownStudioEntryDialog()
+        }
+
+        // Result Card Direct Actions
+        binding.btnResultSave.setOnClickListener { launchExportCurrentArtifact() }
+        binding.btnResultShare.setOnClickListener { toolExecutionController.shareLastResult() }
+        binding.btnResultPreview.setOnClickListener {
+            val file = toolSessionManager.currentState.lastGeneratedFile
+            if (file != null && file.exists()) {
+                openMarkdownViewer(file)
+            }
+        }
+
+        // Primary Execution Action
+        binding.btnExecute.setOnClickListener { toolExecutionController.executeSelectedMode() }
+
+        // Multi-Format Export Action (Save As to device storage)
+        binding.btnExportResult.setOnClickListener { launchExportCurrentArtifact() }
+        binding.btnShareResult.setOnClickListener { toolExecutionController.shareLastResult() }
+    }
+
+    private fun updateHeroBanner() {
+        val topTool = com.veilframe.app.tools.ToolUsageTracker.getMostUsedTool(this)
+        binding.tvHeroCategory.text = topTool.category
+        binding.tvHeroBadge.text = topTool.badge
+        binding.tvHeroTitle.text = topTool.title
+        binding.tvHeroDescription.text = topTool.description
+        binding.btnHeroLaunch.text = topTool.buttonText
+        binding.btnHeroLaunch.setIconResource(topTool.iconRes)
+        val launchAction = {
+            com.veilframe.app.ui.motion.NavigationMotionController.nextOriginView = binding.cardHeroUpscaler
+            when (topTool) {
+                com.veilframe.app.tools.ToolUsageTracker.TrackedTool.IMAGE_UPSCALER -> openImageUpscaler()
+                com.veilframe.app.tools.ToolUsageTracker.TrackedTool.DOCUMENT_SCANNER -> openDocumentScanner()
+                com.veilframe.app.tools.ToolUsageTracker.TrackedTool.QR_STUDIO -> openQrStudio()
+                com.veilframe.app.tools.ToolUsageTracker.TrackedTool.VIDEO_STUDIO -> openVideoStudio()
+                com.veilframe.app.tools.ToolUsageTracker.TrackedTool.IMAGE_STUDIO -> openImageStudio()
+            }
+        }
+        binding.cardHeroUpscaler.setOnClickListener { launchAction() }
+        binding.btnHeroLaunch.setOnClickListener { launchAction() }
+    }
+
+    private fun setupToolsCatalogueFiltering() {
+        binding.layoutToolsCatalogue.tvToolsSubtitle.text =
+            "${WorkspaceRoute.values().size} offline engines for privacy, media, documents, and forensics"
+
+        val cards = listOf(
+            WorkspaceRoute.IMAGE_STUDIO to binding.layoutToolsCatalogue.cardToolImageStudio,
+            WorkspaceRoute.VIDEO_STUDIO to binding.layoutToolsCatalogue.cardToolVideoStudio,
+            WorkspaceRoute.QR_STUDIO to binding.layoutToolsCatalogue.cardToolQrStudio,
+            WorkspaceRoute.DOCUMENT_SCANNER to binding.layoutToolsCatalogue.cardToolDocScanner,
+            WorkspaceRoute.BACKGROUND_REMOVER to binding.layoutToolsCatalogue.cardToolBgRemover,
+            WorkspaceRoute.MOTION_LAB to binding.layoutToolsCatalogue.cardToolMotionLab,
+            WorkspaceRoute.IMAGE_UPSCALER to binding.layoutToolsCatalogue.cardToolAiUpscaler,
+            WorkspaceRoute.IMAGE_CLEANER to binding.layoutToolsCatalogue.cardToolPrivacyScrubber,
+            WorkspaceRoute.VIDEO_CLEANER to binding.layoutToolsCatalogue.cardToolVideoCleaner,
+            WorkspaceRoute.IMAGE_QUALITY to binding.layoutToolsCatalogue.cardToolImageQuality,
+            WorkspaceRoute.FOLDER_SCANNER to binding.layoutToolsCatalogue.cardToolFolderAnalyzer,
+            WorkspaceRoute.AI_BUNDLE to binding.layoutToolsCatalogue.cardToolAiBundler,
+            WorkspaceRoute.MARKDOWN_STUDIO to binding.layoutToolsCatalogue.cardToolMarkdownStudio,
+            WorkspaceRoute.PROVENANCE to binding.layoutToolsCatalogue.cardToolProvenance
+        )
+
+        // Ensure accessibility: assign authoritative TalkBack label to each card from WorkspaceRoute
+        cards.forEach { (route, card) ->
+            card.contentDescription = "${route.title}, ${route.status.label}. ${route.description}"
+        }
+
+        fun applyFilter() {
+            val query = binding.layoutToolsCatalogue.etToolSearch.text?.toString().orEmpty().trim()
+            val checkedChipId = binding.layoutToolsCatalogue.chipGroupToolCategories.checkedChipId
+
+            val matchingRoutes = if (query.isEmpty()) {
+                WorkspaceRoute.values().toList()
+            } else {
+                WorkspaceRoute.search(query)
+            }.toSet()
+
+            val selectedCategory = when (checkedChipId) {
+                R.id.chipCategoryCreate -> WorkspaceCategory.CREATE_EDIT
+                R.id.chipCategoryPrivacy -> WorkspaceCategory.PRIVACY
+                R.id.chipCategoryAnalyze -> WorkspaceCategory.ANALYZE
+                R.id.chipCategoryDev -> WorkspaceCategory.DEVELOPER
+                else -> null
+            }
+
+            var visibleCount = 0
+            cards.forEach { (route, card) ->
+                val matchesQuery = route in matchingRoutes
+                val matchesCat = (selectedCategory == null || route.category == selectedCategory)
+                val visible = matchesQuery && matchesCat
+                card.visibility = if (visible) View.VISIBLE else View.GONE
+                if (visible) visibleCount++
+            }
+
+            binding.layoutToolsCatalogue.containerEmptySearch.visibility =
+                if (visibleCount == 0) View.VISIBLE else View.GONE
+        }
+
+        binding.layoutToolsCatalogue.etToolSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                applyFilter()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.layoutToolsCatalogue.chipGroupToolCategories.setOnCheckedStateChangeListener { _, _ ->
+            applyFilter()
+        }
+    }
+
+    private fun showDocumentSourcePicker() {
+        SharedSourcePickerSheet.newInstance(
+            title = "Document Scanner Source",
+            mediaType = SharedSourcePickerSheet.MediaType.DOCUMENT_ONLY,
+            isCameraEnabled = true
+        ) { source ->
+            when (source) {
+                SharedSourcePickerSheet.SourceType.CAMERA -> {
+                    openDocumentScanner()
+                    docScannerController.openCameraViewfinder()
+                }
+                SharedSourcePickerSheet.SourceType.FILES,
+                SharedSourcePickerSheet.SourceType.PHOTOS -> {
+                    openDocumentScanner()
+                    docScannerPhotosLauncher.launch("image/*")
+                }
+            }
+        }.show(supportFragmentManager, SharedSourcePickerSheet.TAG)
+    }
+
+    private fun showBackgroundRemoverSourcePicker() {
+        SharedSourcePickerSheet.newInstance(
+            title = "Background Remover Source",
+            mediaType = SharedSourcePickerSheet.MediaType.IMAGE_ONLY,
+            isCameraEnabled = false,
+            cameraDisabledReason = "Background Remover operates on gallery photos and image files"
+        ) { source ->
+            when (source) {
+                SharedSourcePickerSheet.SourceType.CAMERA -> {
+                    Toast.makeText(this, "Camera capture is not supported for background removal", Toast.LENGTH_SHORT).show()
+                }
+                SharedSourcePickerSheet.SourceType.PHOTOS,
+                SharedSourcePickerSheet.SourceType.FILES -> {
+                    openBackgroundRemover()
+                    bgRemoverPickerLauncher.launch("image/*")
+                }
+            }
+        }.show(supportFragmentManager, SharedSourcePickerSheet.TAG)
+    }
+
+    private fun showImageQualitySourcePicker() {
+        SharedSourcePickerSheet.newInstance(
+            title = "Quality Inspector Source",
+            mediaType = SharedSourcePickerSheet.MediaType.IMAGE_ONLY,
+            isCameraEnabled = false,
+            cameraDisabledReason = "Select an existing image from Photos or Files to inspect quality"
+        ) { _ ->
+            openImageQuality()
+            qualityPickerLauncher.launch("image/*")
+        }.show(supportFragmentManager, SharedSourcePickerSheet.TAG)
+    }
+
+    /**
+     * Hides [cardCleanerActionDock] when the user scrolls to within ~48dp of the bottom of
+     * [scrollTool], and shows it again when scrolling back toward the top.
+     * Uses a simple alpha + translationY animation consistent with the rest of the Motion system.
+     */
+    private fun setupToolScrollDockBehavior() {
+        val thresholdPx = com.veilframe.app.ui.motion.MotionSpec.DOCK_THRESHOLD_DP * resources.displayMetrics.density
+        var lastScrollY = 0
+
+        binding.scrollTool.setOnScrollChangeListener(
+            androidx.core.widget.NestedScrollView.OnScrollChangeListener { sv, _, scrollY, _, _ ->
+                if (navigationController.currentScreen != ScreenState.TOOL) return@OnScrollChangeListener
+                val diff = kotlin.math.abs(scrollY - lastScrollY)
+                if (diff < com.veilframe.app.ui.motion.MotionSpec.SCROLL_DEADZONE_PX) return@OnScrollChangeListener
+                lastScrollY = scrollY
+
+                val child = sv.getChildAt(0) ?: return@OnScrollChangeListener
+                val scrollBottom = scrollY + sv.height
+                val totalHeight = child.height
+                val distanceToBottom = totalHeight - scrollBottom
+
+                val progress = (1.0f - (distanceToBottom / thresholdPx)).coerceIn(0.0f, 1.0f)
+                val targetDocked = if (binding.cardResultSummary.visibility == android.view.View.VISIBLE) {
+                    binding.btnResultSave
+                } else {
+                    binding.cardPrivacySummary
+                }
+                com.veilframe.app.ui.motion.ExpressiveMotion.updateDockProgress(
+                    floatingDock = binding.cardCleanerActionDock,
+                    dockedActions = targetDocked,
+                    progress = progress
+                )
+            }
+        )
+    }
+
+    private fun launchExportCurrentArtifact() {
+        val file = toolSessionManager.currentState.lastGeneratedFile
+        if (file != null && file.exists()) {
+            val mimeType = safStorageManager.getExportMimeType(file)
+            exportDocumentLauncher.launch(file.name to mimeType)
+        } else {
+            Toast.makeText(this, "No output artifact to export", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private var lastNavClickTime = 0L
+    private fun canNavigate(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastNavClickTime < 500L) return false
+        lastNavClickTime = now
+        return true
+    }
+
+    private fun clearBackTimer() {
+        backClearTimerJob?.cancel()
+        backClearTimerJob = null
+    }
+
+    private fun openTool(toolMode: ToolMode) {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        toolSessionManager.configureToolUI(toolMode)
+        toolSessionManager.restoreToolState(toolSessionManager.currentState)
+        navigationController.showToolScreen()
+        consoleLogController.log("[UI] Opened ${toolSessionManager.getToolTitle(toolMode)} workspace.")
+    }
+
+    private fun openImageStudio() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        com.veilframe.app.tools.ToolUsageTracker.recordToolLaunch(this, com.veilframe.app.tools.ToolUsageTracker.TrackedTool.IMAGE_STUDIO)
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        toolSessionManager.currentToolMode = ToolMode.IMAGE_COMPRESSOR
+        navigationController.showImageStudioScreen()
+        consoleLogController.log("[UI] Opened Image Studio workspace.")
+    }
+
+    private fun openVideoStudio() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        com.veilframe.app.tools.ToolUsageTracker.recordToolLaunch(this, com.veilframe.app.tools.ToolUsageTracker.TrackedTool.VIDEO_STUDIO)
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        toolSessionManager.currentToolMode = ToolMode.VIDEO_COMPRESSOR
+        navigationController.showVideoStudioScreen()
+        consoleLogController.log("[UI] Opened Video Studio workspace.")
+    }
+
+    fun openImageUpscaler() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        com.veilframe.app.tools.ToolUsageTracker.recordToolLaunch(this, com.veilframe.app.tools.ToolUsageTracker.TrackedTool.IMAGE_UPSCALER)
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        toolSessionManager.currentToolMode = ToolMode.IMAGE_UPSCALER
+        navigationController.showImageUpscalerScreen()
+        consoleLogController.log("[UI] Opened Image Upscaler workspace.")
+    }
+
+    fun openQrStudio() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        com.veilframe.app.tools.ToolUsageTracker.recordToolLaunch(this, com.veilframe.app.tools.ToolUsageTracker.TrackedTool.QR_STUDIO)
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showQrStudioScreen()
+        if (supportFragmentManager.findFragmentById(R.id.fragmentQrStudio) == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentQrStudio, com.veilframe.app.qr.ui.QrStudioFragment())
+                .commit()
+        }
+        consoleLogController.log("[UI] Opened QR Studio workspace.")
+    }
+
+    fun openMarkdownViewer(uri: Uri, title: String? = null) {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showMarkdownViewerScreen()
+        markdownViewerController.loadMarkdown(uri, title)
+        consoleLogController.log("[MARKDOWN] Opened viewer: ${title ?: uri.lastPathSegment}")
+    }
+
+    fun openMarkdownViewer(file: File, title: String? = null) {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showMarkdownViewerScreen()
+        markdownViewerController.loadMarkdown(file, title)
+        consoleLogController.log("[MARKDOWN] Opened viewer: ${file.name}")
+    }
+
+    fun openDocumentScanner() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        com.veilframe.app.tools.ToolUsageTracker.recordToolLaunch(this, com.veilframe.app.tools.ToolUsageTracker.TrackedTool.DOCUMENT_SCANNER)
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showDocumentScannerScreen()
+        consoleLogController.log("[UI] Opened Document Scanner workspace.")
+    }
+
+    fun openBackgroundRemover() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showBackgroundRemoverScreen()
+        consoleLogController.log("[UI] Opened Background Remover workspace.")
+    }
+
+    fun openMotionLab() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showMotionLabScreen()
+        consoleLogController.log("[UI] Opened Motion Lab workspace.")
+    }
+
+    fun openImageQuality() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        navigationController.showImageQualityScreen()
+        consoleLogController.log("[UI] Opened Image Quality Forensics workspace.")
+    }
+
+    fun openProvenance() {
+        if (!canNavigate()) return
+        clearBackTimer()
+        pauseVideoPlayback()
+        if (navigationController.currentScreen == ScreenState.TOOL) {
+            toolSessionManager.saveCurrentToolState()
+        }
+        if (::provenanceController.isInitialized) {
+            provenanceController.reset()
+        }
+        navigationController.showProvenanceScreen()
+        consoleLogController.log("[UI] Opened Provenance & Verify workspace.")
+    }
+
+    private fun showDiagnosticsDialog() {
+        val cvStatus = if (com.veilframe.app.cv.core.CvRuntime.isNativeAvailable) "Available (Hardware Accelerated)" else "Fallback (Java/Emulated)"
+        val thermalStatus = com.veilframe.app.runtime.ThermalGovernor.status
+        val storageUsedMb = com.veilframe.app.storage.StorageGovernor.calculateManagedStorageBytes(this) / (1024 * 1024)
+        val storageMaxGb = com.veilframe.app.storage.StorageGovernor.getMaxStorageGb(this)
+        val logLength = consoleLogController.getLogs().length
+
+        val msg = """
+            • OpenCV Engine: $cvStatus
+            • Thermal Status: Level $thermalStatus
+            • Managed Storage: ${storageUsedMb}MB / ${storageMaxGb}GB Limit
+            • Diagnostic Log Buffer: $logLength characters
+            • Security Model: Zero-Network Offline Sandbox
+        """.trimIndent()
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("VeilFrame System Diagnostics")
+            .setMessage(msg)
+            .setIcon(R.drawable.ic_settings)
+            .setPositiveButton("View Live Console") { _, _ ->
+                showFullConsoleLogDialog()
+            }
+            .setNeutralButton("Clear Logs") { _, _ ->
+                consoleLogController.clear()
+                android.widget.Toast.makeText(this, "Diagnostic logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showFullConsoleLogDialog() {
+        val currentLogs = consoleLogController.getLogs().ifBlank { "[SYS] No telemetry events logged yet." }
+        val scrollView = android.widget.ScrollView(this)
+        val textView = android.widget.TextView(this).apply {
+            text = currentLogs
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(32, 24, 32, 24)
+            setTextIsSelectable(true)
+        }
+        scrollView.addView(textView)
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Live Technical Console")
+            .setView(scrollView)
+            .setPositiveButton("Copy All") { _, _ ->
+                val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("VeilFrame Logs", currentLogs))
+                android.widget.Toast.makeText(this, "Console logs copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Dismiss", null)
+            .show()
+    }
+
+    private fun refreshLibrary() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val exportDirs = listOf(
+                File(filesDir, "exports"),
+                File(cacheDir, "exports"),
+                File(cacheDir, "studio_exports"),
+                File(cacheDir, "scanned_docs"),
+                File(filesDir, "cv/exports")
+            )
+            // v2.3.0 fix ("library does not store previous works as it displays"):
+            // MediaStore saves (Pictures/Movies VeilFrame — upscaler, bg remover, Motion Lab)
+            // were invisible to the Library. Merge them with the app-dir exports.
+            val mediaStoreFiles = mutableListOf<File>()
+            try {
+                contentResolver.query(
+                    MediaStore.Files.getContentUri("external"),
+                    arrayOf(MediaStore.Files.FileColumns.DATA),
+                    "${MediaStore.Files.FileColumns.DATA} LIKE ?",
+                    arrayOf("%/VeilFrame/%"),
+                    null
+                )?.use { c ->
+                    val idx = c.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                    if (idx >= 0) {
+                        while (c.moveToNext()) {
+                            val path = c.getString(idx) ?: continue
+                            mediaStoreFiles += File(path)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("VeilFrame.Library", "MediaStore merge unavailable: ${e.message}")
+            }
+
+            val allFiles = (exportDirs
+                .filter { it.exists() && it.isDirectory }
+                .flatMap { it.listFiles()?.toList() ?: emptyList() } + mediaStoreFiles)
+                .filter { it.isFile && it.length() > 0 }
+                .distinctBy { it.absolutePath }
+                .sortedByDescending { it.lastModified() }
+
+            val savedSessions = com.veilframe.app.document.DocumentSession.listSavedSessions(this@MainActivity)
+            val checkedFilterId = binding.layoutLibrary.chipGroupLibraryFilter.checkedChipId
+            val filteredFiles = when (checkedFilterId) {
+                R.id.chipLibraryImages -> allFiles.filter { f ->
+                    val ext = f.extension.lowercase()
+                    ext in listOf("jpg", "jpeg", "png", "webp", "bmp")
+                }
+                R.id.chipLibraryVideos -> allFiles.filter { f ->
+                    val ext = f.extension.lowercase()
+                    ext in listOf("mp4", "mkv", "webm", "mov", "avi")
+                }
+                R.id.chipLibraryDocs -> allFiles.filter { f ->
+                    val ext = f.extension.lowercase()
+                    ext in listOf("pdf", "md", "txt", "json", "aibundle")
+                }
+                R.id.chipLibraryQr -> allFiles.filter { f ->
+                    f.name.lowercase().contains("qr") || f.extension.lowercase() == "svg"
+                }
+                else -> allFiles
+            }
+
+            withContext(Dispatchers.Main) {
+                val density = resources.displayMetrics.density
+                val margin12 = (12 * density).toInt()
+
+                // Render active document scanner sessions
+                if (savedSessions.isNotEmpty()) {
+                    binding.layoutLibrary.containerLibrarySessionsSection.visibility = View.VISIBLE
+                    binding.layoutLibrary.containerLibrarySessions.removeAllViews()
+                    for (session in savedSessions) {
+                        val card = com.google.android.material.card.MaterialCardView(this@MainActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                bottomMargin = margin12
+                            }
+                            radius = 16 * density
+                            cardElevation = 1 * density
+                            setCardBackgroundColor(getColor(R.color.vf_surface))
+                            strokeColor = getColor(R.color.vf_surface_variant)
+                            strokeWidth = (1 * density).toInt()
+                        }
+
+                        val row = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            setPadding(margin12, margin12, margin12, margin12)
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                        }
+
+                        val icon = ImageView(this@MainActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams((32 * density).toInt(), (32 * density).toInt()).apply {
+                                marginEnd = margin12
+                            }
+                            setImageResource(R.drawable.ic_camera)
+                            setColorFilter(getColor(R.color.vf_primary))
+                        }
+
+                        val infoCol = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        }
+
+                        val nameText = TextView(this@MainActivity).apply {
+                            text = session.title
+                            setTextColor(getColor(R.color.vf_text_primary))
+                            textSize = 13f
+                            setTypeface(null, android.graphics.Typeface.BOLD)
+                            maxLines = 1
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                        }
+
+                        val metaText = TextView(this@MainActivity).apply {
+                            val timeAgo = android.text.format.DateUtils.getRelativeTimeSpanString(session.lastModifiedAt)
+                            text = "${session.pageCount} pages • Edited $timeAgo"
+                            setTextColor(getColor(R.color.vf_text_secondary))
+                            textSize = 11f
+                        }
+
+                        infoCol.addView(nameText)
+                        infoCol.addView(metaText)
+
+                        val btnContinue = com.google.android.material.button.MaterialButton(
+                            this@MainActivity,
+                            null,
+                            androidx.appcompat.R.attr.borderlessButtonStyle
+                        ).apply {
+                            text = "Continue"
+                            textSize = 12f
+                            setTextColor(getColor(R.color.vf_primary))
+                            setOnClickListener {
+                                openDocumentScanner()
+                                docScannerController.resumeSession(session.sessionId)
+                            }
+                        }
+
+                        val btnDelete = com.google.android.material.button.MaterialButton(
+                            this@MainActivity,
+                            null,
+                            androidx.appcompat.R.attr.borderlessButtonStyle
+                        ).apply {
+                            layoutParams = LinearLayout.LayoutParams((36 * density).toInt(), (36 * density).toInt())
+                            setIconResource(R.drawable.ic_action_clear)
+                            iconTint = android.content.res.ColorStateList.valueOf(getColor(R.color.vf_text_secondary))
+                            setPadding(0, 0, 0, 0)
+                            setOnClickListener {
+                                com.veilframe.app.document.DocumentSession.deleteSession(this@MainActivity, session.sessionId)
+                                refreshLibrary()
+                            }
+                        }
+
+                        row.addView(icon)
+                        row.addView(infoCol)
+                        row.addView(btnContinue)
+                        row.addView(btnDelete)
+                        card.addView(row)
+                        binding.layoutLibrary.containerLibrarySessions.addView(card)
+                    }
+                } else {
+                    binding.layoutLibrary.containerLibrarySessionsSection.visibility = View.GONE
+                }
+
+                val hasAnyContent = savedSessions.isNotEmpty() || filteredFiles.isNotEmpty()
+                if (!hasAnyContent) {
+                    binding.layoutLibrary.containerLibraryEmpty.visibility = View.VISIBLE
+                    binding.layoutLibrary.containerLibraryItems.visibility = View.GONE
+                } else {
+                    binding.layoutLibrary.containerLibraryEmpty.visibility = View.GONE
+                    binding.layoutLibrary.containerLibraryItems.visibility = if (filteredFiles.isNotEmpty()) View.VISIBLE else View.GONE
+                    binding.layoutLibrary.containerLibraryItems.removeAllViews()
+
+                    for (file in filteredFiles) {
+                        val card = com.google.android.material.card.MaterialCardView(this@MainActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                bottomMargin = margin12
+                            }
+                            radius = 16 * density
+                            cardElevation = 1 * density
+                            setCardBackgroundColor(getColor(R.color.vf_surface))
+                            strokeColor = getColor(R.color.vf_surface_variant)
+                            strokeWidth = (1 * density).toInt()
+                            isClickable = true
+                            isFocusable = true
+                        }
+
+                        val row = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            setPadding(margin12, margin12, margin12, margin12)
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                        }
+
+                        val icon = ImageView(this@MainActivity).apply {
+                            layoutParams = LinearLayout.LayoutParams((32 * density).toInt(), (32 * density).toInt()).apply {
+                                marginEnd = margin12
+                            }
+                            val iconRes = when (file.extension.lowercase()) {
+                                "jpg", "jpeg", "png", "webp", "bmp" -> R.drawable.ic_tab_image
+                                "mp4", "mkv", "webm", "mov" -> R.drawable.ic_tab_video
+                                "pdf", "md", "txt" -> R.drawable.ic_toc
+                                else -> if (file.name.contains("qr", ignoreCase = true)) R.drawable.ic_tool_qr else R.drawable.ic_check_circle
+                            }
+                            setImageResource(iconRes)
+                            setColorFilter(getColor(R.color.vf_primary))
+                        }
+
+                        val infoCol = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        }
+
+                        val nameText = TextView(this@MainActivity).apply {
+                            text = file.name
+                            setTextColor(getColor(R.color.vf_text_primary))
+                            textSize = 13f
+                            setTypeface(null, android.graphics.Typeface.BOLD)
+                            maxLines = 1
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                        }
+
+                        val metaText = TextView(this@MainActivity).apply {
+                            val sizeStr = safStorageManager.formatBytes(file.length())
+                            val dateStr = android.text.format.DateFormat.format("MMM d, yyyy HH:mm", file.lastModified())
+                            text = "$sizeStr • $dateStr"
+                            setTextColor(getColor(R.color.vf_text_secondary))
+                            textSize = 11f
+                        }
+
+                        infoCol.addView(nameText)
+                        infoCol.addView(metaText)
+
+                        val btnShare = com.google.android.material.button.MaterialButton(
+                            this@MainActivity,
+                            null,
+                            androidx.appcompat.R.attr.borderlessButtonStyle
+                        ).apply {
+                            layoutParams = LinearLayout.LayoutParams((48 * density).toInt(), (48 * density).toInt())
+                            setIconResource(R.drawable.ic_action_share)
+                            iconTint = android.content.res.ColorStateList.valueOf(getColor(R.color.vf_primary))
+                            iconGravity = com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START
+                            setPadding(0, 0, 0, 0)
+                            setOnClickListener {
+                                val mime = safStorageManager.getExportMimeType(file)
+                                shareStudioFile(file, mime)
+                            }
+                        }
+
+                        val btnDelete = com.google.android.material.button.MaterialButton(
+                            this@MainActivity,
+                            null,
+                            androidx.appcompat.R.attr.borderlessButtonStyle
+                        ).apply {
+                            layoutParams = LinearLayout.LayoutParams((48 * density).toInt(), (48 * density).toInt())
+                            setIconResource(R.drawable.ic_action_clear)
+                            iconTint = android.content.res.ColorStateList.valueOf(getColor(R.color.vf_text_secondary))
+                            setPadding(0, 0, 0, 0)
+                            setOnClickListener {
+                                file.delete()
+                                refreshLibrary()
+                            }
+                        }
+
+                        card.setOnClickListener {
+                            val mime = safStorageManager.getExportMimeType(file)
+                            shareStudioFile(file, mime)
+                        }
+
+                        row.addView(icon)
+                        row.addView(infoCol)
+                        row.addView(btnShare)
+                        row.addView(btnDelete)
+                        card.addView(row)
+                        binding.layoutLibrary.containerLibraryItems.addView(card)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun scheduleBackClearWork() {
+        clearBackTimer()
+        // If a task is executing in background via foreground service, avoid tearing down active processing
+        val isVideoProcessing = ::videoStudioController.isInitialized && videoStudioController.isProcessing
+        val isUpscalerProcessing = ::imageUpscalerController.isInitialized && imageUpscalerController.isProcessing
+        val isDocScannerProcessing = ::docScannerController.isInitialized && docScannerController.isBusyProcessing
+        val isBgRemoverProcessing = ::backgroundRemoverController.isInitialized && backgroundRemoverController.isProcessing
+
+        if (::videoStudioController.isInitialized && !isVideoProcessing) {
+            videoStudioController.clear()
+        }
+        if (::videoPlayerController.isInitialized && !isVideoProcessing) {
+            videoPlayerController.clearMedia()
+        }
+        if (::imageStudioController.isInitialized) {
+            imageStudioController.clear()
+        }
+        if (::imageUpscalerController.isInitialized && !isUpscalerProcessing) {
+            imageUpscalerController.release()
+        }
+        if (::docScannerController.isInitialized && !isDocScannerProcessing) {
+            docScannerController.release()
+        }
+        if (::backgroundRemoverController.isInitialized && !isBgRemoverProcessing) {
+            backgroundRemoverController.cleanup()
+        }
+        if (::motionLabController.isInitialized) {
+            motionLabController.reset()
+        }
+        if (::provenanceController.isInitialized) {
+            provenanceController.reset()
+        }
+        if (::markdownViewerController.isInitialized) {
+            markdownViewerController.clear()
+        }
+        if (!isUpscalerProcessing && !isDocScannerProcessing && !isBgRemoverProcessing) {
+            workspaceHost.pause()
+        }
+        toolSessionManager.clearCurrentTool()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                File(cacheDir, "temp_drafts").deleteRecursively()
+                File(cacheDir, "temp_renders").deleteRecursively()
+            } catch (_: Exception) {}
+        }
+        consoleLogController.log("[SESSION] Cleared inactive media studio resources on Home.")
+    }
+
+    private fun openFilePickerForCurrentTool() {
+        when (toolSessionManager.currentToolMode) {
+            ToolMode.VIDEO_CLEANER -> {
+                if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
+                    visualMediaPickerLauncher.launch(
+                        PickVisualMediaRequest.Builder()
+                            .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                            .build()
+                    )
+                } else {
+                    filePickerLauncher.launch(arrayOf("video/*"))
+                }
+            }
+            ToolMode.IMAGE_CLEANER -> {
+                if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
+                    visualMediaPickerLauncher.launch(
+                        PickVisualMediaRequest.Builder()
+                            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            .build()
+                    )
+                } else {
+                    filePickerLauncher.launch(arrayOf("image/*"))
+                }
+            }
+            else -> {
+                filePickerLauncher.launch(arrayOf("*/*"))
+            }
+        }
+    }
+
+    private fun handleSingleFileSelected(uri: Uri) {
+        val state = toolSessionManager.currentState
+        state.selectedUri = uri
+        state.isFolderSelected = false
+        state.selectedPathDisplay = safStorageManager.getDisplayName(uri)
+        state.targetFileCount = 1
+        state.targetTotalBytes = safStorageManager.queryFileSize(uri)
+
+        val ext = state.selectedPathDisplay.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        when (toolSessionManager.currentToolMode) {
+            ToolMode.VIDEO_CLEANER -> {
+                when (ext) {
+                    "mp4" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 1)
+                    "mkv" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 2)
+                    "webm" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 3)
+                    else -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 0)
+                }
+            }
+            ToolMode.IMAGE_CLEANER -> {
+                when (ext) {
+                    "jpg", "jpeg" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 1)
+                    "png" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 2)
+                    "webp" -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 3)
+                    else -> toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 0)
+                }
+            }
+            else -> {}
+        }
+        state.formatOptionIndex = toolSessionManager.getSelectedFormatIndex()
+
+        toolSessionManager.updateTargetCardUI(state)
+        toolSessionManager.updatePrivacySummaryUI()
+        toolSessionManager.updatePrimaryActionDock(state)
+        consoleLogController.log("[TARGET] Mounted file: ${state.selectedPathDisplay} (${safStorageManager.formatBytes(state.targetTotalBytes)})")
+    }
+
+    private fun handleFolderSelected(uri: Uri) {
+        val state = toolSessionManager.currentState
+        state.selectedUri = uri
+        state.isFolderSelected = true
+        state.selectedPathDisplay = safStorageManager.getDisplayName(uri)
+
+        if (toolSessionManager.currentToolMode == ToolMode.VIDEO_CLEANER || toolSessionManager.currentToolMode == ToolMode.IMAGE_CLEANER) {
+            toolSessionManager.selectChipByIndex(binding.chipGroupFormat, 0)
+            state.formatOptionIndex = 0
+        }
+
+        toolSessionManager.updateTargetCardUI(state)
+        binding.tvTargetDetails.text = "Indexing directory contents..."
+        binding.tvTargetDetails.setTextColor(getColor(R.color.vf_accent_amber))
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val rootDoc = DocumentFile.fromTreeUri(this@MainActivity, uri)
+            var count = 0
+            var totalBytes = 0L
+
+            fun inspectDoc(doc: DocumentFile) {
+                if (doc.isDirectory) {
+                    doc.listFiles().forEach { inspectDoc(it) }
+                } else if (doc.isFile) {
+                    count++
+                    totalBytes += doc.length()
+                }
+            }
+
+            rootDoc?.listFiles()?.forEach { inspectDoc(it) }
+
+            state.targetFileCount = count
+            state.targetTotalBytes = totalBytes
+
+            withContext(Dispatchers.Main) {
+                binding.tvTargetDetails.text = "$count files • ${safStorageManager.formatBytes(totalBytes)} • Ready"
+                binding.tvTargetDetails.setTextColor(getColor(R.color.vf_accent_green))
+                toolSessionManager.updatePrivacySummaryUI()
+                toolSessionManager.updatePrimaryActionDock(state)
+                consoleLogController.log("[TARGET] Mounted directory: ${state.selectedPathDisplay} ($count files, ${safStorageManager.formatBytes(totalBytes)})")
+            }
+        }
+    }
+
+    private fun pauseVideoPlayback() {
+        if (::videoPlayerController.isInitialized) {
+            videoPlayerController.pause()
+        }
+    }
+
+    private fun shareStudioFile(file: File, mimeType: String) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = android.content.ClipData.newUri(contentResolver, "Share Media Artifact", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Share Media Artifact").apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not share file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun toggleTheme() {
+        val current = com.veilframe.app.settings.ThemeSettingsManager.getThemeMode(this)
+        val next = when (current) {
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.AMOLED -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.SYSTEM -> {
+                val isDark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+                if (isDark) com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT else com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK
+            }
+            else -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK
+        }
+        com.veilframe.app.settings.ThemeSettingsManager.setThemeMode(this, next, applyImmediately = true)
+        // Toolbar toggle: immediate recreate (not inside settings panel)
+        com.veilframe.app.settings.ThemeSettingsManager.consumePendingRecreate()
+        recreate()
+    }
+
+    private fun openSettingsOverlay(animate: Boolean = true, restoreScrollY: Int? = null) {
+        if (isFinishing || isDestroyed) return
+        com.veilframe.app.settings.ThemeSettingsManager.consumePendingRecreate()
+        val panelBinding = binding.layoutSettingsPanel
+
+        val rootInsets = ViewCompat.getRootWindowInsets(binding.rootCoordinator)
+        val sTop = rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val nBottom = rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        if (sTop > 0 || nBottom > 0) {
+            binding.containerSettings.setPadding(0, sTop, 0, nBottom)
+        }
+
+        // 1. Theme mode selection
+        when (com.veilframe.app.settings.ThemeSettingsManager.getThemeMode(this)) {
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.SYSTEM -> panelBinding.rbThemeSystem.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT -> panelBinding.rbThemeLight.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK -> panelBinding.rbThemeDark.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.AMOLED -> panelBinding.rbThemeAmoled.isChecked = true
+        }
+
+        panelBinding.rgThemeMode.setOnCheckedChangeListener { _, checkedId ->
+            val mode = when (checkedId) {
+                R.id.rbThemeLight -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.LIGHT
+                R.id.rbThemeDark -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.DARK
+                R.id.rbThemeAmoled -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.AMOLED
+                else -> com.veilframe.app.settings.ThemeSettingsManager.ThemeMode.SYSTEM
+            }
+            val currentMode = com.veilframe.app.settings.ThemeSettingsManager.getThemeMode(this)
+            if (mode != currentMode) {
+                com.veilframe.app.settings.ThemeSettingsManager.setThemeMode(this, mode, applyImmediately = true)
+                seamlessRecreateSettings()
+            }
+        }
+
+        // 2. Dynamic color toggle with live palette chip disabling
+        fun updatePaletteChipsEnabled(dynamicActive: Boolean) {
+            panelBinding.chipGroupAccentPalette.isEnabled = !dynamicActive
+            panelBinding.chipPaletteMonochrome.isEnabled = !dynamicActive
+            panelBinding.chipPaletteForestSage.isEnabled = !dynamicActive
+            panelBinding.chipPaletteDeepOcean.isEnabled = !dynamicActive
+            panelBinding.chipPaletteWarmAmber.isEnabled = !dynamicActive
+            panelBinding.chipPaletteCyberViolet.isEnabled = !dynamicActive
+            panelBinding.chipGroupAccentPalette.alpha = if (dynamicActive) 0.38f else 1.0f
+            panelBinding.tvDynamicColorNotice.visibility = if (dynamicActive) View.VISIBLE else View.GONE
+        }
+
+        val isDynamicSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val dynamicInitial = com.veilframe.app.settings.ThemeSettingsManager.isDynamicColorEnabled(this) && isDynamicSupported
+        panelBinding.switchDynamicColor.isEnabled = isDynamicSupported
+        panelBinding.switchDynamicColor.isChecked = dynamicInitial
+        updatePaletteChipsEnabled(dynamicInitial)
+
+        panelBinding.switchDynamicColor.setOnCheckedChangeListener { _, isChecked ->
+            val currentDynamic = com.veilframe.app.settings.ThemeSettingsManager.isDynamicColorEnabled(this)
+            if (isChecked != currentDynamic) {
+                com.veilframe.app.settings.ThemeSettingsManager.setDynamicColorEnabled(this, isChecked)
+                updatePaletteChipsEnabled(isChecked)
+                seamlessRecreateSettings()
+            }
+        }
+
+        // 3. Custom accent palette
+        when (com.veilframe.app.settings.ThemeSettingsManager.getAccentPalette(this)) {
+            com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.MONOCHROME -> panelBinding.chipPaletteMonochrome.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.SAGE -> panelBinding.chipPaletteForestSage.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.OCEAN -> panelBinding.chipPaletteDeepOcean.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.AMBER -> panelBinding.chipPaletteWarmAmber.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.VIOLET -> panelBinding.chipPaletteCyberViolet.isChecked = true
+        }
+
+        panelBinding.chipGroupAccentPalette.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (checkedIds.isNotEmpty()) {
+                val palette = when (checkedIds[0]) {
+                    R.id.chipPaletteMonochrome -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.MONOCHROME
+                    R.id.chipPaletteForestSage -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.SAGE
+                    R.id.chipPaletteDeepOcean -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.OCEAN
+                    R.id.chipPaletteWarmAmber -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.AMBER
+                    R.id.chipPaletteCyberViolet -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.VIOLET
+                    else -> com.veilframe.app.settings.ThemeSettingsManager.AccentPalette.MONOCHROME
+                }
+                val currentPalette = com.veilframe.app.settings.ThemeSettingsManager.getAccentPalette(this)
+                val dynamicWasChecked = panelBinding.switchDynamicColor.isChecked
+                if (palette != currentPalette || dynamicWasChecked) {
+                    if (dynamicWasChecked) {
+                        com.veilframe.app.settings.ThemeSettingsManager.setDynamicColorEnabled(this, false)
+                    }
+                    com.veilframe.app.settings.ThemeSettingsManager.setAccentPalette(this, palette)
+                    seamlessRecreateSettings()
+                }
+            }
+        }
+
+        // 4. Typography style
+        when (com.veilframe.app.settings.ThemeSettingsManager.getTypographyStyle(this)) {
+            com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.SYSTEM -> panelBinding.rbTypoSystem.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.DEFAULT -> panelBinding.rbTypoSans.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.MONOSPACE -> panelBinding.rbTypoMonospace.isChecked = true
+            com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.SERIF -> panelBinding.rbTypoSerif.isChecked = true
+        }
+
+        panelBinding.rgTypography.setOnCheckedChangeListener { _, checkedId ->
+            val typo = when (checkedId) {
+                R.id.rbTypoSystem -> com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.SYSTEM
+                R.id.rbTypoMonospace -> com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.MONOSPACE
+                R.id.rbTypoSerif -> com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.SERIF
+                else -> com.veilframe.app.settings.ThemeSettingsManager.TypographyStyle.DEFAULT
+            }
+            val currentTypo = com.veilframe.app.settings.ThemeSettingsManager.getTypographyStyle(this)
+            if (typo != currentTypo) {
+                com.veilframe.app.settings.ThemeSettingsManager.setTypographyStyle(this, typo)
+                com.veilframe.app.settings.ThemeSettingsManager.applyTypography(this)
+            }
+        }
+
+        // 5. Storage governor selection
+        when (com.veilframe.app.storage.StorageGovernor.getMaxStorageGb(this)) {
+            com.veilframe.app.storage.StorageGovernor.LIMIT_1_GB -> panelBinding.rbStorage1Gb.isChecked = true
+            com.veilframe.app.storage.StorageGovernor.LIMIT_2_GB -> panelBinding.rbStorage2Gb.isChecked = true
+            com.veilframe.app.storage.StorageGovernor.LIMIT_4_GB -> panelBinding.rbStorage4Gb.isChecked = true
+            com.veilframe.app.storage.StorageGovernor.LIMIT_8_GB -> panelBinding.rbStorage8Gb.isChecked = true
+            com.veilframe.app.storage.StorageGovernor.LIMIT_UNLIMITED -> panelBinding.rbStorageUnlimited.isChecked = true
+            else -> panelBinding.rbStorage2Gb.isChecked = true
+        }
+
+        panelBinding.rgStorageLimit.setOnCheckedChangeListener { _, checkedId ->
+            val limitGb = when (checkedId) {
+                R.id.rbStorage1Gb -> com.veilframe.app.storage.StorageGovernor.LIMIT_1_GB
+                R.id.rbStorage2Gb -> com.veilframe.app.storage.StorageGovernor.LIMIT_2_GB
+                R.id.rbStorage4Gb -> com.veilframe.app.storage.StorageGovernor.LIMIT_4_GB
+                R.id.rbStorage8Gb -> com.veilframe.app.storage.StorageGovernor.LIMIT_8_GB
+                R.id.rbStorageUnlimited -> com.veilframe.app.storage.StorageGovernor.LIMIT_UNLIMITED
+                else -> com.veilframe.app.storage.StorageGovernor.DEFAULT_LIMIT_GB
+            }
+            com.veilframe.app.storage.StorageGovernor.setMaxStorageGb(this, limitGb)
+            lifecycleScope.launch(Dispatchers.IO) {
+                com.veilframe.app.storage.StorageGovernor.enforceStorageLimit(this@MainActivity)
+            }
+        }
+
+        // 6. Close and dismissal bindings
+        panelBinding.btnSettingsClose.setOnClickListener { closeSettingsOverlay() }
+        binding.scrimSettings.setOnClickListener { closeSettingsOverlay() }
+
+        // 7. Left-to-right swipe-to-dismiss gesture
+        com.veilframe.app.ui.motion.NavigationMotionController.attachSwipeToDismiss(
+            settingsContainer = binding.containerSettings,
+            scrimView = binding.scrimSettings
+        ) {
+            closeSettingsOverlay()
+        }
+
+        if (restoreScrollY != null && restoreScrollY > 0) {
+            panelBinding.scrollSettings.post {
+                panelBinding.scrollSettings.scrollY = restoreScrollY
+            }
+        }
+
+        // 8. Open slide-over animation or instant restore
+        if (animate) {
+            com.veilframe.app.ui.motion.NavigationMotionController.openSettings(
+                settingsContainer = binding.containerSettings,
+                scrimView = binding.scrimSettings
+            )
+        } else {
+            binding.containerSettings.visibility = View.VISIBLE
+            binding.containerSettings.translationX = 0f
+            binding.containerSettings.alpha = 1f
+            binding.scrimSettings.visibility = View.VISIBLE
+            binding.scrimSettings.alpha = 1f
+        }
+    }
+
+    private fun seamlessRecreateSettings() {
+        val panelBinding = binding.layoutSettingsPanel
+        pendingSeamlessSettingsRestore = true
+        pendingSeamlessSettingsScrollY = panelBinding.scrollSettings.scrollY
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
+        recreate()
+    }
+
+    internal fun closeSettingsOverlay() {
+        com.veilframe.app.ui.motion.NavigationMotionController.closeSettings(
+            settingsContainer = binding.containerSettings,
+            scrimView = binding.scrimSettings
+        )
+        com.veilframe.app.settings.ThemeSettingsManager.consumePendingRecreate()
+    }
+
+    private fun openWebUrl(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not open browser", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showMarkdownStudioEntryDialog() {
+        val options = arrayOf<CharSequence>("Open Markdown (.md)", "Create Markdown Document")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Markdown Studio")
+            .setItems(options) { _, which ->
+                if (which == 0) {
+                    markdownPickerLauncher.launch(arrayOf("text/markdown", "text/x-markdown"))
+                } else {
+                    navigationController.showMarkdownViewerScreen()
+                    markdownViewerController.createNewDocument()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showAboutDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("About VeilFrame")
+            .setMessage(
+                """
+                VeilFrame v2.2.9
+                Privacy Forensics & AI Bundler
+                
+                • Local Processing: 100% on-device execution
+                • Privacy First: Heuristic secret & credential masking
+                • Forensic Analysis: PRNU defense, bitstream repacking & SHA-256
+                • Multi-Format Export: .aibundle, HTML, JSON, Markdown, CSV, and media
+                • In-App Updates: Monotonic versionCode & SHA-256 verification
+                
+                Engine Runtime: Native Kotlin + Media3 + FFmpegKit Full
+                Open Source (Apache 2.0 / MIT)
+                """.trimIndent()
+            )
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    companion object {
+        private const val KEY_SCREEN_STATE = "key_screen_state"
+        private const val KEY_PREVIOUS_SCREEN_STATE = "key_previous_screen_state"
+        private const val KEY_TOOL_MODE = "key_tool_mode"
+        private const val KEY_SELECTED_FILE_URI = "key_selected_file_uri"
+        private const val KEY_IS_FOLDER_SELECTED = "key_is_folder_selected"
+        private const val KEY_STUDIO_IMAGE_URIS = "key_studio_image_uris"
+        private const val KEY_STUDIO_VIDEO_URIS = "key_studio_video_uris"
+        private const val KEY_UPSCALER_URI = "key_upscaler_uri"
+        private const val KEY_MOTION_LAB_URI = "key_motion_lab_uri"
+        private const val KEY_MARKDOWN_URI = "key_markdown_uri"
+        private const val KEY_MARKDOWN_FILE_PATH = "key_markdown_file_path"
+        private const val KEY_SETTINGS_OPEN = "key_settings_open"
+        private const val KEY_SETTINGS_SCROLL_Y = "key_settings_scroll_y"
+        private var pendingSeamlessSettingsRestore: Boolean = false
+        private var pendingSeamlessSettingsScrollY: Int = 0
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_SETTINGS_OPEN, binding.containerSettings.visibility == View.VISIBLE || pendingSeamlessSettingsRestore)
+        outState.putInt(KEY_SETTINGS_SCROLL_Y, if (pendingSeamlessSettingsRestore) pendingSeamlessSettingsScrollY else binding.layoutSettingsPanel.scrollSettings.scrollY)
+        outState.putString(KEY_SCREEN_STATE, navigationController.currentScreen.name)
+        outState.putString(KEY_PREVIOUS_SCREEN_STATE, navigationController.previousScreen.name)
+        outState.putString(KEY_TOOL_MODE, toolSessionManager.currentToolMode.name)
+
+        // Save active Tool session state
+        val toolState = toolSessionManager.currentState
+        toolState.selectedUri?.let { uri ->
+            outState.putString(KEY_SELECTED_FILE_URI, uri.toString())
+            outState.putBoolean(KEY_IS_FOLDER_SELECTED, toolState.isFolderSelected)
+        }
+
+        // Save lightweight media references
+        if (::imageStudioController.isInitialized && imageStudioController.selectedMediaList.isNotEmpty()) {
+            val uris = ArrayList(imageStudioController.selectedMediaList.map { it.uri.toString() })
+            outState.putStringArrayList(KEY_STUDIO_IMAGE_URIS, uris)
+        }
+        if (::videoStudioController.isInitialized && videoStudioController.selectedMediaList.isNotEmpty()) {
+            val uris = ArrayList(videoStudioController.selectedMediaList.map { it.uri.toString() })
+            outState.putStringArrayList(KEY_STUDIO_VIDEO_URIS, uris)
+        }
+        if (::imageUpscalerController.isInitialized) {
+            imageUpscalerController.selectedUri?.let {
+                outState.putString(KEY_UPSCALER_URI, it.toString())
+            }
+        }
+        if (::motionLabController.isInitialized) {
+            motionLabController.currentSourceUri?.let {
+                outState.putString(KEY_MOTION_LAB_URI, it.toString())
+            }
+        }
+        if (::markdownViewerController.isInitialized) {
+            markdownViewerController.currentDocumentUri?.let {
+                outState.putString(KEY_MARKDOWN_URI, it.toString())
+            }
+            markdownViewerController.currentDocumentFile?.let {
+                outState.putString(KEY_MARKDOWN_FILE_PATH, it.absolutePath)
+            }
+        }
+    }
+
+    private fun restoreInstanceState(savedInstanceState: Bundle) {
+        navigationController.isRestoringState = true
+        try {
+            val screenStateName = savedInstanceState.getString(KEY_SCREEN_STATE)
+            val targetScreen = screenStateName?.let { runCatching { ScreenState.valueOf(it) }.getOrNull() } ?: ScreenState.HOME
+            val toolModeName = savedInstanceState.getString(KEY_TOOL_MODE)
+            val toolMode = toolModeName?.let { runCatching { ToolMode.valueOf(it) }.getOrNull() } ?: ToolMode.VIDEO_CLEANER
+            toolSessionManager.currentToolMode = toolMode
+
+            // Restore active Tool URI if present
+            val toolUriStr = savedInstanceState.getString(KEY_SELECTED_FILE_URI)
+            val isFolder = savedInstanceState.getBoolean(KEY_IS_FOLDER_SELECTED, false)
+            if (toolUriStr != null) {
+                val uri = Uri.parse(toolUriStr)
+                if (isFolder) {
+                    handleFolderSelected(uri)
+                } else {
+                    handleSingleFileSelected(uri)
+                }
+            }
+
+            // Restore Media Studio items if present
+            savedInstanceState.getStringArrayList(KEY_STUDIO_IMAGE_URIS)?.let { uriStrings ->
+                val uris = uriStrings.map { Uri.parse(it) }
+                if (uris.isNotEmpty() && ::imageStudioController.isInitialized) {
+                    imageStudioController.handleImagesSelected(uris)
+                }
+            }
+            savedInstanceState.getStringArrayList(KEY_STUDIO_VIDEO_URIS)?.let { uriStrings ->
+                val uris = uriStrings.map { Uri.parse(it) }
+                if (uris.isNotEmpty() && ::videoStudioController.isInitialized) {
+                    videoStudioController.handleVideosSelected(uris)
+                }
+            }
+            savedInstanceState.getString(KEY_UPSCALER_URI)?.let { uriStr ->
+                if (targetScreen == ScreenState.IMAGE_UPSCALER) {
+                    workspaceHost.getOrInflateImageUpscaler()
+                }
+                if (::imageUpscalerController.isInitialized) {
+                    imageUpscalerController.handleImageSelected(Uri.parse(uriStr))
+                }
+            }
+            savedInstanceState.getString(KEY_MOTION_LAB_URI)?.let { uriStr ->
+                if (targetScreen == ScreenState.MOTION_LAB) {
+                    workspaceHost.getOrInflateMotionLab()
+                }
+                if (::motionLabController.isInitialized) {
+                    motionLabController.setSource(Uri.parse(uriStr))
+                }
+            }
+
+            // Navigate back to the active screen
+            when (targetScreen) {
+                ScreenState.HOME -> navigationController.showHomeScreen()
+                ScreenState.TOOLS -> navigationController.showToolsScreen()
+                ScreenState.LIBRARY -> navigationController.showLibraryScreen()
+                ScreenState.TOOL -> {
+                    toolSessionManager.configureToolUI(toolMode)
+                    toolSessionManager.restoreToolState(toolSessionManager.currentState)
+                    navigationController.showToolScreen()
+                }
+                ScreenState.IMAGE_STUDIO -> openImageStudio()
+                ScreenState.VIDEO_STUDIO -> openVideoStudio()
+                ScreenState.QR_STUDIO -> openQrStudio()
+                ScreenState.IMAGE_UPSCALER -> openImageUpscaler()
+                ScreenState.DOCUMENT_SCANNER_ENTRY,
+                ScreenState.DOCUMENT_SCANNER_CAMERA,
+                ScreenState.DOCUMENT_SCANNER_PAGES,
+                ScreenState.DOCUMENT_SCANNER_EDITOR,
+                ScreenState.DOCUMENT_SCANNER_EXPORT -> openDocumentScanner()
+                ScreenState.BACKGROUND_REMOVER -> openBackgroundRemover()
+                ScreenState.IMAGE_QUALITY -> openImageQuality()
+                ScreenState.MOTION_LAB -> openMotionLab()
+                ScreenState.PROVENANCE -> openProvenance()
+                ScreenState.MARKDOWN_VIEWER -> {
+                    val mdUriStr = savedInstanceState.getString(KEY_MARKDOWN_URI)
+                    val mdFilePath = savedInstanceState.getString(KEY_MARKDOWN_FILE_PATH)
+                    if (mdUriStr != null) {
+                        openMarkdownViewer(Uri.parse(mdUriStr))
+                    } else if (mdFilePath != null) {
+                        openMarkdownViewer(File(mdFilePath))
+                    } else {
+                        navigationController.showMarkdownViewerScreen()
+                    }
+                }
+            }
+
+            if (savedInstanceState.getBoolean(KEY_SETTINGS_OPEN, false) || pendingSeamlessSettingsRestore) {
+                val scrollY = if (pendingSeamlessSettingsRestore) pendingSeamlessSettingsScrollY else savedInstanceState.getInt(KEY_SETTINGS_SCROLL_Y, 0)
+                pendingSeamlessSettingsRestore = false
+                pendingSeamlessSettingsScrollY = 0
+                binding.rootCoordinator.post {
+                    openSettingsOverlay(animate = false, restoreScrollY = scrollY)
+                }
+            }
+        } finally {
+            navigationController.isRestoringState = false
+        }
+    }
+
+    fun hasActiveProcessing(): Boolean {
+        if (::videoStudioController.isInitialized && videoStudioController.isProcessing) return true
+        if (::imageStudioController.isInitialized && imageStudioController.isProcessing) return true
+        if (::imageUpscalerController.isInitialized && imageUpscalerController.isProcessing) return true
+        if (::backgroundRemoverController.isInitialized && backgroundRemoverController.isProcessing) return true
+        if (::motionLabController.isInitialized && motionLabController.isProcessing) return true
+        if (::docScannerController.isInitialized && docScannerController.isBusyProcessing) return true
+        if (::toolExecutionController.isInitialized && toolExecutionController.isExecuting) return true
+        if (VeilFrameProcessingService.activeJob?.state == com.veilframe.app.media.JobState.RUNNING) return true
+        return false
+    }
+
+    fun cancelAllActiveProcessing() {
+        if (::videoStudioController.isInitialized && videoStudioController.isProcessing) {
+            videoStudioController.cancelProcessing()
+        }
+        if (::imageStudioController.isInitialized && imageStudioController.isProcessing) {
+            imageStudioController.cancelProcessing()
+        }
+        if (::imageUpscalerController.isInitialized && imageUpscalerController.isProcessing) {
+            imageUpscalerController.cancelProcessing()
+        }
+        if (::backgroundRemoverController.isInitialized && backgroundRemoverController.isProcessing) {
+            backgroundRemoverController.cancelProcessing()
+        }
+        if (::motionLabController.isInitialized && motionLabController.isProcessing) {
+            motionLabController.cancel()
+        }
+        if (::docScannerController.isInitialized && docScannerController.isBusyProcessing) {
+            docScannerController.cancelProcessing()
+        }
+        if (::toolExecutionController.isInitialized && toolExecutionController.isExecuting) {
+            toolExecutionController.cancelExecution()
+        }
+        if (VeilFrameProcessingService.activeJob?.state == com.veilframe.app.media.JobState.RUNNING) {
+            VeilFrameProcessingService.cancelProcessing(this)
+        }
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "versionCode": 229,
+  "versionName": "2.2.9",
+  "tag": "v2.2.9",
+  "apk": "VeilFrame-android-arm64.apk",
+  "sha256": "",
+  "mandatory": false,
+  "changelog": [
+    "Material 3 Expressive UI: spring-physics motion (VfSprings v3.1), emphasized typography, surface-container ladders, and unified WorkspaceInsets",
+    "Motion Lab (Alpha): frame interpolation and 2x/4x FPS synthesis powered by native optical flow (DIS / Farnebäck)",
+    "Document Scanner: real-time EMA QuadStabilizer, per-page exposure/contrast/saturation Adjust dialog, and progressive PDF export",
+    "Background Remover: direct MediaStore gallery exports (Pictures/VeilFrame) with persistent Library synchronization",
+    "AI Upscaler: streaming band processing for huge images, dynamic memory governor (6–16 GB devices), Lanczos-3 precomputed kernels, and fail-closed quantized-model pipeline (FP16/INT8)",
+    "CV Reliability: Phase B6 cancellation checkpoints across all computer vision primitives and OpenCV 4.14.0 + WeChatQRCode in-tree SDK"
+  ]
+}

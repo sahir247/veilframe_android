@@ -1,0 +1,1658 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/containerVideoStudio"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollVideoStudio"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:background="?android:attr/colorBackground"
+        android:clipToPadding="false"
+        android:paddingBottom="48dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- ============================================================= -->
+        <!-- 1. APP BAR (2 Horizontal Levels: Menu + Title/Subtitle + Fav)  -->
+        <!-- ============================================================= -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="?attr/colorSurface"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVidStudioMenu"
+                    style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="Navigation Menu"
+                    app:icon="@drawable/ic_menu"
+                    app:iconTint="@color/vf_primary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvVidStudioTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Video Studio"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.04" />
+
+                    <TextView
+                        android:id="@+id/tvVidStudioSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Visual Video Studio &amp; Compressor"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:maxLines="1"
+                    android:id="@+id/btnVidStudioFavorite"
+                    style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="Favorite Action"
+                    app:icon="@drawable/ic_favorite" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============================================================= -->
+        <!-- 2. FILES CARD (Container / Card with Empty and Selected state) -->
+        <!-- ============================================================= -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVidFiles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Files Header: Title + Clear All -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Files"
+                        android:textAppearance="?attr/textAppearanceBodyLargeEmphasized"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVidClearAll"
+                        style="@style/Widget.VeilFrame.Button.Quiet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Clear all"
+                        android:textColor="@color/vf_text_muted"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false" />
+                </LinearLayout>
+
+                <!-- Empty State -->
+                <LinearLayout
+                    android:id="@+id/layoutVidEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:paddingTop="24dp"
+                    android:paddingBottom="24dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:src="@drawable/ic_tab_video"
+                        android:layout_marginBottom="16dp"
+                        app:tint="@color/vf_secondary"
+                        android:contentDescription="Select Video Placeholder" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelectVideo"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Select video to edit"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        app:icon="@drawable/ic_file_pick"
+                        app:iconTint="@color/vf_primary" />
+                </LinearLayout>
+
+                <!-- Selected State -->
+                <LinearLayout
+                    android:id="@+id/layoutVidSelectedState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:id="@+id/tvVidSelectedCount"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="1 video selected"
+                            android:textColor="@color/vf_accent_green"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVidAddMore"
+                            style="@style/Widget.VeilFrame.Button.Action"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Add more"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            app:icon="@drawable/ic_add"
+                            app:iconTint="@color/vf_primary"
+                            app:iconSize="14dp" />
+                    </LinearLayout>
+
+                    <!-- Multi-Video Navigation Controls (Active when multiple items added) -->
+                    <LinearLayout
+                        android:id="@+id/layoutVidNavRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp"
+                        android:background="@color/vf_surface_variant"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
+                        android:visibility="gone">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVidPrev"
+                            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:contentDescription="Previous Video"
+                            app:icon="@drawable/ic_arrow_back"
+                            app:iconTint="@color/vf_primary"
+                            android:enabled="false" />
+
+                        <TextView
+                            android:id="@+id/tvVidPagination"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="1 / 1"
+                            android:textColor="@color/vf_text_primary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVidNext"
+                            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:contentDescription="Next Video"
+                            app:icon="@drawable/ic_arrow_forward"
+                            app:iconTint="@color/vf_primary"
+                            android:enabled="false" />
+                    </LinearLayout>
+
+                    <!-- Horizontal Multi-Video Strip -->
+                    <HorizontalScrollView
+                        android:id="@+id/scrollVidThumbnails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:scrollbars="none"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/layoutVidThumbStrip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical" />
+                    </HorizontalScrollView>
+
+                    <!-- File Item Card -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:cardBackgroundColor="?attr/colorSurfaceVariant"
+                        app:cardCornerRadius="8dp"
+                        app:strokeWidth="0dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:padding="10dp">
+
+                            <ImageView
+                                android:id="@+id/imgVidThumb"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:scaleType="centerCrop"
+                                android:background="@color/vf_bg_dark"
+                                android:contentDescription="Video Thumbnail" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:layout_marginEnd="8dp"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvVidFileName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="video.mp4"
+                                    android:textColor="@color/vf_text_primary"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold"
+                                    android:maxLines="1"
+                                    android:ellipsize="middle" />
+
+                                <TextView
+                                    android:id="@+id/tvVidFileDetails"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="14.2 MB • 00:24.0 • 1080p"
+                                    android:textAppearance="?attr/textAppearanceBodySmall"
+                                    android:textColor="?attr/colorOnSurfaceVariant" />
+                            </LinearLayout>
+
+                            <com.google.android.material.button.MaterialButton
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:maxLines="1"
+                                android:id="@+id/btnVidRemoveFile"
+                                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:contentDescription="Remove File"
+                                app:icon="@drawable/ic_close" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============================================================= -->
+        <!-- 3. LIVE PREVIEW & VISUAL TIMELINE TRIMMER CARD                 -->
+        <!-- ============================================================= -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVidLivePreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Section Header: Live Preview + Reset -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Live preview"
+                        android:textAppearance="?attr/textAppearanceBodyLargeEmphasized"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVidResetPreview"
+                        style="@style/Widget.VeilFrame.Button.Quiet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Reset"
+                        android:textColor="@color/vf_text_secondary"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        app:icon="@drawable/ic_reset"
+                        app:iconTint="@color/vf_text_secondary"
+                        app:iconSize="14dp" />
+                </LinearLayout>
+
+                <!-- Real Video Player Container Frame -->
+                <FrameLayout
+                    android:id="@+id/cardVidPlayerContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="220dp"
+                    android:background="@color/vf_bg_dark"
+                    android:layout_marginBottom="8dp">
+
+                    <!-- Dynamic Viewport (scales/crops according to aspect ratio 16:9, 9:16, 1:1) -->
+                    <FrameLayout
+                        android:id="@+id/videoPlayerViewport"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center">
+
+                        <!-- Hardware-Accelerated Video Player Surface -->
+                        <TextureView
+                            android:id="@+id/videoTextureView"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center" />
+
+                        <!-- Thumbnail / Poster frame until video starts -->
+                        <ImageView
+                            android:id="@+id/imgVidPreview"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitCenter"
+                            android:contentDescription="Video Frame Preview" />
+                    </FrameLayout>
+
+                    <!-- Buffering Progress Indicator -->
+                    <ProgressBar
+                        android:id="@+id/playerBufferingBar"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_gravity="center"
+                        android:indeterminateTint="@color/vf_primary"
+                        android:visibility="gone" />
+
+                    <!-- Center Play/Pause Action Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnPlayerPlayPause"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar.Filled"
+                        android:layout_width="54dp"
+                        android:layout_height="54dp"
+                        android:layout_gravity="center"
+                        app:icon="@drawable/ic_action_play"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:contentDescription="Play or Pause Video" />
+
+                    <!-- Floating Top Action Bar Overlay (Replay, Speed Badge, Mute Toggle) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="8dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPlayerReplay"
+                            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            app:icon="@drawable/ic_reset"
+                            app:iconTint="@color/vf_text_primary"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:contentDescription="Replay from trim start" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <TextView
+                            android:id="@+id/tvPlayerSpeedBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@color/vf_surface_variant"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp"
+                            android:layout_marginEnd="6dp"
+                            android:text="1.0×"
+                            android:textColor="@color/vf_primary"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPlayerMute"
+                            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            app:icon="@drawable/ic_audio_volume"
+                            app:iconTint="@color/vf_text_primary"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:contentDescription="Mute or Unmute Audio" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Playback Position & Timeline Indicator -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="2dp">
+
+                    <TextView
+                        android:id="@+id/tvPlayerPosition"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="00:00.0"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvVidTrimDurationLabel"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="Trimmed: 0.0s"
+                        android:textColor="@color/vf_accent_green"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPlayerTotalDuration"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="00:10.0"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Live Playback Position Scrubber -->
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/playerScrubber"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0"
+                    android:valueTo="100"
+                    android:value="0"
+                    app:thumbColor="@color/vf_accent_green"
+                    app:trackColorActive="@color/vf_accent_green" />
+
+
+
+                <!-- Video Editing Tools Grid (Row 1: Trim, Scale, Target Size) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidTrim"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Trim"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_trim"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidScale"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Scale"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_resize"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidColor"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Colour"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_color_filter"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+                </LinearLayout>
+
+                <!-- Video Editing Tools Grid (Row 2: Speed, Crop Aspect, Audio) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidSpeed"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Speed"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_speed"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidAspect"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Aspect"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_aspect_ratio"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolVidAudio"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        app:iconPadding="4dp"
+                        android:text="Audio"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:enabled="false"
+                        app:icon="@drawable/ic_audio_volume"
+                        app:iconTint="@color/vf_primary"
+                        app:iconSize="16dp" />
+                </LinearLayout>
+
+                <!-- Smart Auto-Reframe (9:16) AI Tool Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVidAutoReframe"
+                    style="@style/Widget.VeilFrame.Button.Action"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="Smart Auto-Reframe (9:16)"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:enabled="false"
+                    app:icon="@drawable/ic_aspect_ratio"
+                    app:iconTint="@color/vf_primary"
+                    app:iconSize="18dp" />
+
+                <!-- Electronic Image Stabilization (EIS) Tool Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVidStabilize"
+                    style="@style/Widget.VeilFrame.Button.Action"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:text="Stabilize Footage (EIS)"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:enabled="false"
+                    app:icon="@drawable/ic_focus_ring"
+                    app:iconTint="@color/vf_primary"
+                    app:iconSize="18dp" />
+
+                <!-- Comparison Summary: Before -> After -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/vf_surface_variant"
+                    app:cardCornerRadius="8dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="BEFORE"
+                                android:textColor="@color/vf_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvVidBeforeStats"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="No video selected"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center_vertical"
+                            android:src="@drawable/ic_arrow_forward"
+                            app:tint="@color/vf_secondary"
+                            android:contentDescription="Transformed into" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="ESTIMATED / ACTUAL"
+                                android:textColor="@color/vf_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvVidAfterStats"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Select a video to calculate"
+                                android:textColor="@color/vf_accent_green"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvVidActualStats"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=""
+                                android:textColor="@color/vf_primary"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============================================================= -->
+        <!-- 3B. EDIT SUMMARY CARD                                         -->
+        <!-- ============================================================= -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVidEditSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="EDIT SUMMARY"
+                        android:textAppearance="?attr/textAppearanceTitleSmallEmphasized"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVidResetAllEdits"
+                        style="@style/Widget.VeilFrame.Button.Quiet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Reset all edits"
+                        android:textColor="@color/vf_secondary"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="end" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvVidSummaryEmpty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No edits applied"
+                    android:textColor="@color/vf_text_secondary"
+                    android:textSize="12sp"
+                    android:visibility="visible" />
+
+                <LinearLayout
+                    android:id="@+id/layoutVidSummaryDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryTrim"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Trim       Original (10.0s)"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryScale"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Scale      1080p (Original)"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryAspect"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Aspect     Original (16:9)"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummarySpeed"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Speed      1.0×"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryAudio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Audio      Preserved"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryColor"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Colour     Original"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvVidSummaryStabilization"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Stabilization  Active (EIS 5% Zoom)"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============================================================= -->
+        <!-- 4. OUTPUT CARD (Target Size, Format, Codec, Quality, Res, Audio, Dest) -->
+        <!-- ============================================================= -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVidOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Output Settings"
+                    android:textColor="@color/vf_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Target Size & Platform Presets -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TARGET SIZE &amp; LIMITS"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:layout_marginBottom="8dp">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupVidTargetPreset"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetAuto"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Auto (CRF)"
+                            android:checked="true" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetWhatsapp"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="WhatsApp Status" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetDiscord"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Discord (25 MB)" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetNitro"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Discord Nitro (50 MB)" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetEmail"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Email (8 MB)" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetWeb"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Web (10 MB)" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipVidPresetCustom"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Custom MB" />
+                    </com.google.android.material.chip.ChipGroup>
+                </HorizontalScrollView>
+
+                <!-- WhatsApp Status Resolution Selector (HD 720p vs FHD 1080p) -->
+                <LinearLayout
+                    android:id="@+id/layoutWhatsappStatusResolution"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="STATUS RESOLUTION"
+                        android:textColor="@color/vf_text_muted"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.06"
+                        android:layout_marginBottom="4dp" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupWhatsappStatusResolution"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipStatusResHd"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="HD 720p (1900k)"
+                            android:checked="true" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipStatusResFhd"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="FHD 1080p (3800k)" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <!-- WhatsApp Status Controlled Pipeline Notice -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardWhatsappStatusNotice"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        app:cardBackgroundColor="@color/vf_status_info_bg"
+                        app:cardCornerRadius="8dp"
+                        app:strokeColor="@color/vf_status_info"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:padding="10dp">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:src="@drawable/ic_info_outline"
+                                app:tint="@color/vf_status_info"
+                                android:contentDescription="Info" />
+
+                            <TextView
+                                android:id="@+id/tvWhatsappStatusNotice"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="8dp"
+                                android:text="WhatsApp Status encoding parameters are managed automatically; media transformations (trim, speed, crop) remain user-controlled."
+                                android:textColor="@color/vf_status_info"
+                                android:textSize="11sp"
+                                android:lineSpacingExtra="2dp" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- Custom MB Input Field -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/tilVidCustomTargetMb"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:visibility="gone"
+                    android:hint="Target Size (MB)">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etVidCustomTargetMb"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberDecimal"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="13sp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Container Format -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CONTAINER FORMAT"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidFormat"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidMp4"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MP4"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidMkv"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MKV" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidWebm"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="WebM" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidGif"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GIF" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Codec Selection -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ENCODER CODEC"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidCodec"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidCodecH264"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="H.264"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidCodecH265"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="H.265" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidCodecVp9"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VP9" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidCodecCopy"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Stream Copy" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Compression Speed / Efficiency (Slow Compress vs Fast Compress) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="COMPRESSION SPEED &amp; EFFICIENCY"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidSpeedPreset"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidSpeedSlow"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Slow (Max Quality, Smaller Size)"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidSpeedMedium"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Medium (Balanced)" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidSpeedFast"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Fast (Quick Export)" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Pixel Color Format (YUV420p vs Auto) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PIXEL COLOR FORMAT"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidPixFmt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidPixFmtYuv420p"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="YUV420p (Max Compatibility)"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidPixFmtAuto"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Auto (Source Format)" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Quality / Compression Slider -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Compression Quality:"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvVidQualityValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="CRF 26 (Balanced)"
+                        android:textColor="@color/vf_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/sliderVidQuality"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="18"
+                    android:valueTo="35"
+                    android:value="26"
+                    android:stepSize="1"
+                    android:layout_marginBottom="12dp"
+                    app:thumbColor="@color/vf_primary" />
+
+                <!-- Resolution Selection -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="RESOLUTION"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidResolution"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidResOriginal"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Original"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidRes1080p"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1080p" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidRes720p"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="720p" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidRes480p"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="480p" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidRes360p"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="360p" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Audio Track -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AUDIO TRACK"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupVidAudio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidAudioKeep"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Keep"
+                        android:checked="true" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipVidAudioRemove"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Remove" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Destination Folder -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DESTINATION FOLDER"
+                    android:textColor="@color/vf_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"
+                    android:layout_marginBottom="6dp" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardVidDestination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="?attr/colorSurfaceVariant"
+                    app:cardCornerRadius="8dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="12dp">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_folder_pick"
+                            app:tint="@color/vf_primary"
+                            android:contentDescription="Destination Folder" />
+
+                        <TextView
+                            android:id="@+id/tvVidDestinationPath"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="10dp"
+                            android:layout_marginEnd="8dp"
+                            android:text="Movies / VeilFrame"
+                            android:textColor="@color/vf_text_primary"
+                            android:textSize="12sp"
+                            android:maxLines="1"
+                            android:ellipsize="middle" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVidChangeDestination"
+                            style="@style/Widget.VeilFrame.Button.Quiet"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Change"
+                            android:textColor="@color/vf_primary"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Output Filename -->
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Output Filename">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etVidOutputFilename"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="13sp"
+                        android:text="compressed_video.mp4" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============================================================= -->
+        <!-- 5. PRIMARY EXECUTION ACTION (Dynamic single dominant action)   -->
+        <!-- ============================================================= -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnVidExecute"
+            style="@style/Widget.VeilFrame.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="Select video"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:ellipsize="end"
+            app:icon="@drawable/ic_compress"
+            app:iconGravity="textStart" />
+
+        <!-- Processing Progress -->
+        <LinearLayout
+            android:id="@+id/layoutVidProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                        style="@style/Widget.VeilFrame.Progress.Wavy"
+                android:id="@+id/progressVidStudio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/tvVidProgressStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:layout_marginTop="6dp"
+                android:text="Encoding &amp; compressing video with FFmpeg..."
+                android:textColor="@color/vf_text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Result Share & Save buttons -->
+        <LinearLayout
+            android:id="@+id/layoutVidResultActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnVidSaveResult"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:text="Save Video"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                app:icon="@drawable/ic_action_save"
+                app:iconTint="@color/vf_primary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnVidShareResult"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="Share"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                app:icon="@drawable/ic_action_share"
+                app:iconTint="@color/vf_primary" />
+        </LinearLayout>
+
+    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Floating Smart Action Dock (Scroll-merging quick action pill) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardFloatingActionDock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="?attr/colorSurfaceContainer"
+        app:strokeColor="@color/vf_surface_stroke"
+        app:strokeWidth="1dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFloatingExecute"
+                style="@style/Widget.VeilFrame.Button.Primary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Execute"
+                app:icon="@drawable/ic_compress"
+                app:iconSize="18dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFloatingShare"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Share"
+                app:icon="@drawable/ic_action_share"
+                app:iconTint="@color/vf_primary"
+                app:iconSize="18dp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</FrameLayout>

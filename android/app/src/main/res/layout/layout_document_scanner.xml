@@ -1,0 +1,607 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/layoutDocumentScannerRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:visibility="gone">
+
+    <!-- Normal Content Layer: Toolbar + Empty State / Page Manager -->
+    <LinearLayout
+        android:id="@+id/containerDocMainFlow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Top App Bar -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbarDocScanner"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorSurface"
+            app:navigationIcon="@drawable/ic_arrow_back"
+            app:navigationIconTint="?attr/colorOnSurface"
+            app:contentInsetStartWithNavigation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingEnd="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvDocScannerTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Document Scanner"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
+
+                    <TextView
+                        android:id="@+id/tvDocScannerSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Multi-Page Intake &amp; PDF Export"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="11sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDocExportPdf"
+                    style="@style/Widget.VeilFrame.Button.Utility"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="Export PDF"
+                    android:textSize="12sp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:icon="@drawable/ic_action_save"
+                    app:iconSize="16dp" />
+            </LinearLayout>
+        </com.google.android.material.appbar.MaterialToolbar>
+
+        <!-- Main Content Area -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <!-- 1. Empty State (Start Scan or Import) -->
+            <LinearLayout
+                android:id="@+id/containerDocEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="32dp">
+
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@drawable/ic_camera"
+                    app:tint="@color/vf_text_secondary"
+                    android:contentDescription="No Scans" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="No Document Pages"
+                    android:textColor="@color/vf_text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="Capture with live camera edge detection or import photos from storage to create multi-page documents."
+                    android:textColor="@color/vf_text_secondary"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocEmptyCamera"
+                        style="@style/Widget.VeilFrame.Button.Primary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:singleLine="true"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:text="Camera"
+                        app:iconGravity="textStart"
+                        app:icon="@drawable/ic_camera" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocEmptyImport"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:singleLine="true"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:text="Import"
+                        app:iconGravity="textStart"
+                        app:icon="@drawable/ic_tab_image" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 2. Real Page Manager & Multi-Page Document Workspace -->
+            <LinearLayout
+                android:id="@+id/containerDocPreview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Large Selected Page Preview -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:id="@+id/ivDocPagePreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Scanned Page Preview" />
+
+                    <!-- Floating Page Indicator Badge -->
+                    <TextView
+                        android:id="@+id/tvDocPageIndicator"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:background="?attr/colorSurfaceContainer"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="5dp"
+                        android:paddingBottom="5dp"
+                        android:text="Page 1 of 1"
+                        android:textColor="@color/vf_text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
+
+                <!-- Visual Horizontal Thumbnail Strip -->
+                <HorizontalScrollView
+                    android:id="@+id/hsvDocThumbnails"
+                    android:layout_width="match_parent"
+                    android:layout_height="92dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/containerDocThumbnails"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <!-- Page Operations Strip (Reorder, Rotate, Duplicate, Delete) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageMoveLeft"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Move Left"
+                        app:icon="@drawable/ic_arrow_back" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageMoveRight"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Move Right"
+                        app:icon="@drawable/ic_arrow_forward" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageRotate"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Rotate 90"
+                        app:icon="@drawable/ic_rotate" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageAdjust"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Adjust page"
+                        app:icon="@drawable/ic_edit" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageDuplicate"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Duplicate Page"
+                        app:icon="@drawable/ic_action_copy" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageResetCrop"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Reset Crop"
+                        app:icon="@drawable/ic_reset" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDocPageDelete"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="Delete Page"
+                        app:icon="@drawable/ic_action_clear"
+                        app:iconTint="@android:color/holo_red_light" />
+                </LinearLayout>
+
+                <!-- Processing / Filter Chips -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="4dp"
+                    android:scrollbars="none">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupDocFilters"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleLine="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterOriginal"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Original" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterEnhanced"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            android:text="Enhanced" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterBw"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Black &amp; White" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterGrayscale"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Grayscale" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterReceipt"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Receipt" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipFilterIdDoc"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ID Card" />
+                    </com.google.android.material.chip.ChipGroup>
+                </HorizontalScrollView>
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Bottom Actions Dock (Floating Pill) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardDocActionDock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:strokeColor="@color/vf_surface_stroke"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDocAddCamera"
+                    style="@style/Widget.VeilFrame.Button.Primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="+ Camera"
+                    app:icon="@drawable/ic_camera"
+                    app:iconSize="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDocAddPhotos"
+                    style="@style/Widget.VeilFrame.Button.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:singleLine="true"
+                    android:text="+ Photos"
+                    app:icon="@drawable/ic_tab_image"
+                    app:iconSize="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDocAutoDetect"
+                    style="@style/Widget.VeilFrame.Button.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:singleLine="true"
+                    android:text="Auto Crop"
+                    app:icon="@drawable/ic_crop"
+                    app:iconSize="16dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+
+    <!-- Dedicated Fullscreen CameraX Document Camera Screen -->
+    <FrameLayout
+        android:id="@+id/containerDocCamera"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:visibility="gone">
+
+        <!-- CameraX Viewfinder -->
+        <androidx.camera.view.PreviewView
+            android:id="@+id/docCameraPreviewView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Live Detected Document Quad Canvas -->
+        <com.veilframe.app.ui.views.DocumentQuadOverlayView
+            android:id="@+id/docQuadOverlayView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Top Camera Header Overlay -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="#77000000"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDocCamClose"
+                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Close Camera"
+                app:icon="@drawable/ic_close"
+                app:iconTint="@color/vf_text_primary" />
+
+            <ImageView
+                android:id="@+id/ivDocCamStatusIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="8dp"
+                android:importantForAccessibility="no"
+                app:srcCompat="@drawable/ic_crop"
+                app:tint="@color/vf_text_secondary" />
+
+            <TextView
+                android:id="@+id/tvDocCamStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="Align document inside frame"
+                android:textColor="@color/vf_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDocCamFlip"
+                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="Flip Camera"
+                app:icon="@drawable/ic_rotate"
+                app:iconTint="@color/vf_text_primary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDocCamFlash"
+                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Toggle Flash"
+                app:icon="@drawable/ic_flash_off"
+                app:iconTint="@color/vf_text_primary" />
+        </LinearLayout>
+
+        <!-- Tap-to-Focus Animated Ring Overlay -->
+        <ImageView
+            android:id="@+id/ivDocCamFocusRing"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_focus_ring"
+            android:visibility="gone"
+            android:contentDescription="Focus Ring" />
+
+        <!-- Floating Camera Zoom Presets Bar -->
+        <LinearLayout
+            android:id="@+id/containerDocCamZoom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="116dp"
+            android:background="@drawable/bg_pill_accent"
+            android:backgroundTint="#88000000"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/btnDocZoomHalf"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:text="0.5x"
+                android:textColor="@color/vf_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/btnDocZoom1x"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:text="1x"
+                android:textColor="@color/vf_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/btnDocZoom2x"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:text="2x"
+                android:textColor="@color/vf_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- Bottom Camera Action Overlay (Rapid Multi-Capture & Shutter) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="#99000000"
+            android:padding="20dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDocCamImport"
+                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Import Photos"
+                app:icon="@drawable/ic_tab_image"
+                app:iconTint="@color/vf_text_primary" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Rapid Multi-Capture Shutter Button -->
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/btnDocCamShutter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:fabCustomSize="72dp"
+                app:backgroundTint="@color/vf_text_primary"
+                app:tint="@color/vf_bg_dark"
+                app:srcCompat="@drawable/ic_camera"
+                android:contentDescription="Take Scan" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Done / Page Counter Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDocCamDone"
+                style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="0dp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                android:contentDescription="Done"
+                app:icon="@drawable/ic_done"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/vf_text_primary" />
+        </LinearLayout>
+    </FrameLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

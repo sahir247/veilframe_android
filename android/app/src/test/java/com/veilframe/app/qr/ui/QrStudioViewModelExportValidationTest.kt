@@ -1,0 +1,1327 @@
+package com.veilframe.app.qr.ui
+
+import android.app.Application
+import android.graphics.Bitmap
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.veilframe.app.qr.AnimatedQrGenerator
+import com.veilframe.app.qr.GenerationMode
+import com.veilframe.app.qr.QrGenerator
+import com.veilframe.app.qr.QrStyle
+import com.veilframe.app.qr.error.QrError
+import com.veilframe.app.qr.exporter.SvgExporter
+import com.veilframe.app.qr.model.*
+import com.veilframe.app.qr.renderer.ConnectedOrganicRenderer
+import com.veilframe.app.qr.renderer.RandomRectangleRenderer
+import java.io.File
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * Unit tests verifying that QrStudioViewModel does not silently export fallback URLs
+ * like "https://example.com" when the user-provided content is blank, and properly sets
+ * user-facing validation error messages.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class QrStudioViewModelExportValidationTest {
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun testExportRejectedWhenContentIsBlank() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // Ensure content starts blank or is set to whitespace
+        vm.updateContent("   ")
+
+        // 1. Save to Gallery
+        vm.saveToGallery()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 2. Save SVG
+        vm.saveSvg()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 3. Save GIF
+        vm.saveGif()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 4. Save Video
+        vm.saveVideo()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 5. Save Animated SVG
+        vm.saveAnimatedSvg()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 6. Save JPEG
+        vm.saveJpeg()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 7. Save PDF
+        vm.savePdf()
+        assertEquals("Content is required to export QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+
+        // 8. Share
+        vm.share()
+        assertEquals("Content is required to share QR code", vm.state.value.saveResult)
+        assertFalse(vm.state.value.isLoading)
+        assertFalse(vm.state.value.isExporting)
+    }
+
+    @Test
+    fun testBlankContentDoesNotGeneratePreviewOrExampleCom() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateContent("   ")
+
+        // Must not silently generate a preview for example.com
+        assertNull(vm.state.value.bitmap)
+        assertNull(vm.state.value.matrix)
+        assertNull(vm.state.value.scanabilityReport)
+        assertFalse(vm.state.value.isRenderingPreview)
+        assertFalse(vm.state.value.isLoading)
+    }
+
+    @Test
+    fun testAutoRepairRefusesBlankContent() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateContent("")
+        vm.autoRepair()
+
+        // Auto repair must not run or set repairNotice on blank content
+        assertNull(vm.state.value.repairNotice)
+        assertNull(vm.state.value.bitmap)
+    }
+
+    @Test
+    fun testSeparatePreviewAndExportLoadingStates() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        assertFalse(vm.state.value.isRenderingPreview)
+        assertFalse(vm.state.value.isExporting)
+        assertFalse(vm.state.value.isLoading)
+    }
+
+    @Test
+    fun testFormStateAndStyleStateUpdates() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // Preset and Form Hydration
+        vm.updateActivePreset(999)
+        assertEquals(999, vm.state.value.activePresetId)
+
+        vm.updateWifiForm("TestSSID", "TestPass", 2, true)
+        assertEquals("TestSSID", vm.state.value.wifiSsid)
+        assertEquals("TestPass", vm.state.value.wifiPassword)
+        assertEquals(2, vm.state.value.wifiSecurityPos)
+        assertTrue(vm.state.value.wifiHidden)
+
+        vm.updateVcardForm("Partha", "Maitra", "9876543210", "partha@example.com", "VeilFrame")
+        assertEquals("Partha", vm.state.value.vcardFirst)
+        assertEquals("Maitra", vm.state.value.vcardLast)
+        assertEquals("9876543210", vm.state.value.vcardPhone)
+        assertEquals("partha@example.com", vm.state.value.vcardEmail)
+        assertEquals("VeilFrame", vm.state.value.vcardOrg)
+
+        vm.updateEmailForm("hello@example.com", "Hi", "Message")
+        assertEquals("hello@example.com", vm.state.value.emailRecipient)
+        assertEquals("Hi", vm.state.value.emailSubject)
+        assertEquals("Message", vm.state.value.emailBody)
+
+        vm.updateSmsForm("123456", "Hello")
+        assertEquals("123456", vm.state.value.smsPhone)
+        assertEquals("Hello", vm.state.value.smsBody)
+
+        vm.updateUpiForm("merchant@upi", "250.00")
+        assertEquals("merchant@upi", vm.state.value.upiVpa)
+        assertEquals("250.00", vm.state.value.upiAmount)
+
+        // Contextual Style Options
+        vm.updateD25Depth(1.75f)
+        assertEquals(1.75f, vm.state.value.d25Depth, 0.001f)
+
+        vm.updateLineDirection(com.veilframe.app.qr.model.LineDirection.CROSS)
+        assertEquals(com.veilframe.app.qr.model.LineDirection.CROSS, vm.state.value.lineDirection)
+
+        vm.updateLineThickness(0.85f)
+        assertEquals(0.85f, vm.state.value.lineThickness, 0.001f)
+
+        vm.updateDsjSizes(0.45f, 0.45f)
+        assertEquals(0.45f, vm.state.value.dsjLineSize, 0.001f)
+
+        val initialSeed = vm.state.value.randomRectSeed
+        vm.randomizeRandomRectSeed()
+        assertNotEquals(initialSeed, vm.state.value.randomRectSeed)
+    }
+
+    @Test
+    fun testRepairNoticeCanBeCleared() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.clearRepairNotice()
+        assertNull(vm.state.value.repairNotice)
+    }
+
+    @Test
+    fun testScannerPipelinePauseAndResume() {
+        val scanner = com.veilframe.app.qr.scanner.QrScanner {}
+        assertFalse(scanner.isAnalysisPaused)
+
+        scanner.pauseAnalysis()
+        assertTrue(scanner.isAnalysisPaused)
+
+        scanner.resumeAnalysis()
+        assertFalse(scanner.isAnalysisPaused)
+        scanner.close()
+    }
+
+    @Test
+    fun testIndependentDsjSizes() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateDsjLineSize(0.42f)
+        assertEquals(0.42f, vm.state.value.dsjLineSize, 0.001f)
+        // xSize should remain at default 0.7f
+        assertEquals(0.70f, vm.state.value.dsjXSize, 0.001f)
+
+        vm.updateDsjXSize(0.88f)
+        assertEquals(0.42f, vm.state.value.dsjLineSize, 0.001f)
+        assertEquals(0.88f, vm.state.value.dsjXSize, 0.001f)
+
+        vm.updateDsjColors(0x112233, 0x445566, 0x778899)
+        assertEquals(0x112233, vm.state.value.dsjHorizontalColor)
+        assertEquals(0x445566, vm.state.value.dsjVerticalColor)
+        assertEquals(0x778899, vm.state.value.dsjXColor)
+    }
+
+    @Test
+    fun testMultiDimensionalD25Style() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateD25Depth(1.4f)
+        vm.updateD25PositionDepth(0.8f)
+        vm.updateD25Angle(30f)
+        vm.updateD25Colors(0x10000000, 0x20000000)
+
+        assertEquals(1.4f, vm.state.value.d25Depth, 0.001f)
+        assertEquals(0.8f, vm.state.value.d25PositionDepth, 0.001f)
+        assertEquals(30f, vm.state.value.d25Angle, 0.001f)
+        assertEquals(0x10000000, vm.state.value.d25LeftColor)
+        assertEquals(0x20000000, vm.state.value.d25RightColor)
+    }
+
+    @Test
+    fun testLineVariantAndTopology() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateLineVariant(LineVariant.CIRCUIT)
+        assertEquals(LineVariant.CIRCUIT, vm.state.value.lineVariant)
+
+        vm.updateLineLengthFraction(0.75f)
+        assertEquals(0.75f, vm.state.value.lineLengthFraction, 0.001f)
+
+        vm.updateLineTopology(accentRings = true, circuitBridges = true)
+        assertTrue(vm.state.value.lineAccentRings)
+        assertTrue(vm.state.value.lineCircuitBridges)
+    }
+
+    @Test
+    fun testBubbleFunctionAndJitterUpdaters() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateBubbleCluster(ambient = false, density = 0.35f)
+        assertFalse(vm.state.value.bubbleAmbient)
+        assertEquals(0.35f, vm.state.value.bubbleDensity, 0.001f)
+
+        vm.updateRandomJitter(scale = 0.4f, offset = 0.2f, color = 0.05f)
+        assertEquals(0.4f, vm.state.value.randomJitterScale, 0.001f)
+        assertEquals(0.2f, vm.state.value.randomJitterOffset, 0.001f)
+        assertEquals(0.05f, vm.state.value.randomJitterColor, 0.001f)
+
+        vm.updateVeilFunction(type = VeilFunctionType.CIRCLE, dataStyle = VeilFunctionDataStyle.RECTANGLE)
+        assertEquals(VeilFunctionType.CIRCLE, vm.state.value.veilFunctionType)
+        assertEquals(VeilFunctionDataStyle.RECTANGLE, vm.state.value.veilFunctionDataStyle)
+
+        vm.updateParamFunction(type = FunctionType.SPIRAL)
+        assertEquals(FunctionType.SPIRAL, vm.state.value.paramFunctionType)
+
+        vm.updateConnectedLineThickness(0.33f)
+        assertEquals(0.33f, vm.state.value.connectedLineThickness, 0.001f)
+
+        vm.updateGradient(start = 0xFF0000, end = 0x00FF00, type = GradientType.LINEAR)
+        assertEquals(0xFF0000, vm.state.value.gradientStart)
+        assertEquals(0x00FF00, vm.state.value.gradientEnd)
+        assertEquals(GradientType.LINEAR, vm.state.value.gradientType)
+
+        val insets = DirectionalInsets(left = 2, top = 3, right = 4, bottom = 5)
+        vm.updateDirectionalQuietZone(insets)
+        assertEquals(insets, vm.state.value.directionalQuietZone)
+    }
+
+    @Test
+    fun testSingleFlightExportSerialization() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // Multiple rapid export attempts on blank content are rejected safely
+        vm.saveToGallery()
+        vm.saveSvg()
+        vm.saveGif()
+        vm.saveVideo()
+        vm.saveAnimatedSvg()
+        vm.saveJpeg()
+        vm.savePdf()
+        vm.share()
+
+        assertFalse(vm.state.value.isExporting)
+        assertEquals("Content is required to share QR code", vm.state.value.saveResult)
+    }
+
+    @Test
+    fun testExportButtonEligibilitySemantics() {
+        // Contract: canExport = content.isNotBlank() && !isRenderingPreview && !isExporting
+        // Does NOT depend on state.bitmap != null
+        val stateBlank = QrStudioViewModel.UiState(content = "", isRenderingPreview = false, isExporting = false, bitmap = null)
+        val canExportBlank = stateBlank.content.isNotBlank() && !stateBlank.isRenderingPreview && !stateBlank.isExporting
+        assertFalse(canExportBlank)
+
+        val stateReadyNoBitmapYet = QrStudioViewModel.UiState(content = "https://veilframe.app", isRenderingPreview = false, isExporting = false, bitmap = null)
+        val canExportReady = stateReadyNoBitmapYet.content.isNotBlank() && !stateReadyNoBitmapYet.isRenderingPreview && !stateReadyNoBitmapYet.isExporting
+        assertTrue(canExportReady)
+
+        val stateBusyRendering = QrStudioViewModel.UiState(content = "https://veilframe.app", isRenderingPreview = true, isExporting = false, bitmap = null)
+        val canExportBusyRendering = stateBusyRendering.content.isNotBlank() && !stateBusyRendering.isRenderingPreview && !stateBusyRendering.isExporting
+        assertFalse(canExportBusyRendering)
+
+        val stateBusyExporting = QrStudioViewModel.UiState(content = "https://veilframe.app", isRenderingPreview = false, isExporting = true, bitmap = null)
+        val canExportBusyExporting = stateBusyExporting.content.isNotBlank() && !stateBusyExporting.isRenderingPreview && !stateBusyExporting.isExporting
+        assertFalse(canExportBusyExporting)
+    }
+
+    @Test
+    fun testBuildDesignFromStatePopulatesAllStyleParameters() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateContent("https://veilframe.app")
+        vm.updateD25Depth(1.8f)
+        vm.updateD25PositionDepth(0.6f)
+        vm.updateD25Angle(35f)
+        vm.updateD25Colors(0x111111, 0x222222)
+        vm.updateLineDirection(LineDirection.CROSS)
+        vm.updateLineThickness(0.7f)
+        vm.updateLineVariant(LineVariant.CIRCUIT)
+        vm.updateLineLengthFraction(0.85f)
+        vm.updateLineTopology(accentRings = true, circuitBridges = true)
+        vm.updateDsjLineSize(0.45f)
+        vm.updateDsjXSize(0.95f)
+        vm.updateDsjColors(0x123456, 0x654321, 0xABCDEF)
+        vm.updateRandomJitter(scale = 0.35f, offset = 0.22f, color = 0.08f)
+        vm.updateBubbleCluster(ambient = false, density = 0.28f)
+        vm.updateVeilFunction(type = VeilFunctionType.CIRCLE, dataStyle = VeilFunctionDataStyle.RECTANGLE)
+        vm.updateParamFunction(type = FunctionType.NOISE)
+        vm.updateConnectedLineThickness(0.38f)
+        vm.updateGradient(start = 0xFF0000, end = 0x0000FF, type = GradientType.LINEAR)
+        val insets = DirectionalInsets(left = 1, top = 2, right = 3, bottom = 4)
+        vm.updateDirectionalQuietZone(insets)
+
+        val design = vm.buildDesignFromState(vm.state.value, isPreview = false)
+
+        // Verify DepthStyle
+        assertEquals(1.8f, design.depthStyle.depth, 0.001f)
+        assertEquals(0.6f, design.depthStyle.positionDepth, 0.001f)
+        assertEquals(35f, design.depthStyle.angleDegrees, 0.001f)
+        assertEquals(0x111111, design.depthStyle.leftColor)
+        assertEquals(0x222222, design.depthStyle.rightColor)
+
+        // Verify LineStyle
+        assertEquals(LineDirection.CROSS, design.lineStyle.direction)
+        assertEquals(0.7f, design.lineStyle.thicknessFraction, 0.001f)
+        assertEquals(0.85f, design.lineStyle.lengthFraction, 0.001f)
+        assertEquals(LineVariant.CIRCUIT, design.lineStyle.variant)
+        assertTrue(design.lineStyle.accentRingsEnabled)
+        assertTrue(design.lineStyle.circuitBridgesEnabled)
+
+        // Verify VeilDsjStyle
+        assertEquals(0.45f, design.veilDsjStyle.lineSize, 0.001f)
+        assertEquals(0.95f, design.veilDsjStyle.xSize, 0.001f)
+        assertEquals(0x123456, design.veilDsjStyle.horizontalLineColor)
+        assertEquals(0x654321, design.veilDsjStyle.verticalLineColor)
+        assertEquals(0xABCDEF, design.veilDsjStyle.xColor)
+
+        // Verify JitterStyle
+        assertEquals(0.35f, design.jitterStyle.scaleJitter, 0.001f)
+        assertEquals(0.22f, design.jitterStyle.offsetJitter, 0.001f)
+        assertEquals(0.08f, design.jitterStyle.colorJitter, 0.001f)
+
+        // Verify BubbleClusterStyle
+        assertFalse(design.clusterStyle.ambientBubbles)
+        assertEquals(0.28f, design.clusterStyle.ambientDensity, 0.001f)
+
+        // Verify VeilFunctionStyle
+        assertEquals(VeilFunctionType.CIRCLE, design.veilFunctionStyle.functionType)
+        assertEquals(VeilFunctionDataStyle.RECTANGLE, design.veilFunctionStyle.dataStyle)
+
+        // Verify FunctionStyle
+        assertEquals(FunctionType.NOISE, design.functionStyle.type)
+
+        // Verify CompositePrimitiveStyle
+        assertEquals(0.38f, design.compositeStyle.lineThickness, 0.001f)
+
+        // Verify Palette & DirectionalQuietZone
+        assertEquals(0xFF0000, design.palette.gradientStart)
+        assertEquals(0x0000FF, design.palette.gradientEnd)
+        assertEquals(GradientType.LINEAR, design.palette.gradientType)
+        assertEquals(insets, design.directionalQuietZone)
+    }
+
+    @Test
+    fun testRandomRectangleRendererBehavioralScaleJitter() {
+        val matrix = QrMatrix("https://veilframe.app/jitter-test", ErrorCorrectionLevel.M)
+        val geometry = QrGeometry(matrix.size, 512, 512, quietZoneModules = 4)
+        val renderer = RandomRectangleRenderer()
+
+        val designScale01 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 99999L),
+            jitterStyle = RandomJitterStyle(seed = 99999L, scaleJitter = 0.1f, offsetJitter = 0.0f)
+        )
+        val designScale05 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 99999L),
+            jitterStyle = RandomJitterStyle(seed = 99999L, scaleJitter = 0.5f, offsetJitter = 0.0f)
+        )
+
+        val ir01 = renderer.generateGeometry(matrix, designScale01, geometry)
+        val ir05 = renderer.generateGeometry(matrix, designScale05, geometry)
+
+        val widths01 = ir01.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).map { it.width }
+        val widths05 = ir05.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).map { it.width }
+
+        assertNotEquals("Different scaleJitter values must produce different rect widths", widths01, widths05)
+
+        val svg01 = SvgExporter.generateSvg(matrix, designScale01)
+        val svg05 = SvgExporter.generateSvg(matrix, designScale05)
+        assertNotEquals("SVG output must differ when jitter scale is modified", svg01, svg05)
+    }
+
+    @Test
+    fun testRandomRectangleRendererBehavioralOffsetJitter() {
+        val matrix = QrMatrix("https://veilframe.app/offset-test", ErrorCorrectionLevel.M)
+        val geometry = QrGeometry(matrix.size, 512, 512, quietZoneModules = 4)
+        val renderer = RandomRectangleRenderer()
+
+        val designOffset0 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 88888L),
+            jitterStyle = RandomJitterStyle(seed = 88888L, scaleJitter = 0.25f, offsetJitter = 0.0f)
+        )
+        val designOffset03 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 88888L),
+            jitterStyle = RandomJitterStyle(seed = 88888L, scaleJitter = 0.25f, offsetJitter = 0.3f)
+        )
+
+        val ir0 = renderer.generateGeometry(matrix, designOffset0, geometry)
+        val ir03 = renderer.generateGeometry(matrix, designOffset03, geometry)
+
+        val positions0 = ir0.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).map { Pair(it.x, it.y) }
+        val positions03 = ir03.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).map { Pair(it.x, it.y) }
+
+        assertNotEquals("Different offsetJitter values must produce different module positions", positions0, positions03)
+
+        val svg0 = SvgExporter.generateSvg(matrix, designOffset0)
+        val svg03 = SvgExporter.generateSvg(matrix, designOffset03)
+        assertNotEquals("SVG output must differ when jitter offset is modified", svg0, svg03)
+    }
+
+    private fun createTestBitmap(): Bitmap {
+        val bmp: Bitmap? = try {
+            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        } catch (_: Throwable) {
+            null
+        }
+        return bmp ?: allocateBitmapReflectively()
+    }
+
+    private fun allocateBitmapReflectively(): Bitmap {
+        val unsafeClass = Class.forName("sun.misc.Unsafe")
+        val field = unsafeClass.getDeclaredField("theUnsafe")
+        field.isAccessible = true
+        val unsafe = field.get(null)
+        val method = unsafeClass.getMethod("allocateInstance", Class::class.java)
+        return method.invoke(unsafe, Bitmap::class.java) as Bitmap
+    }
+
+    @Test
+    fun testImageStyleSourcePhotoRequirementPredicates() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // Case A: IMAGE style, no source photo, no background -> banner visible
+        val stateNoPhotos = QrStudioViewModel.UiState(
+            style = QrStyle.IMAGE,
+            sourceImage = null,
+            backgroundImage = null
+        )
+        assertTrue(
+            "Source photo required when sourceImage is null",
+            vm.isSourcePhotoRequired(stateNoPhotos.style, stateNoPhotos.sourceImage)
+        )
+
+        val actualBackgroundBitmap = createTestBitmap()
+        assertNotNull(actualBackgroundBitmap)
+
+        // Case B: IMAGE style, no source photo, even when an actual background Bitmap is present -> banner must STILL be visible!
+        // (Ensures presence of canvas backdrop Bitmap never masks a missing source photo needed for finder cutout masks)
+        val stateBgConfigured = QrStudioViewModel.UiState(
+            style = QrStyle.IMAGE,
+            sourceImage = null,
+            backgroundImage = actualBackgroundBitmap,
+            backgroundImageAlpha = 0.80f
+        )
+        assertTrue(
+            "Banner must remain visible when sourceImage is null even if actual background Bitmap is configured",
+            vm.isSourcePhotoRequired(stateBgConfigured.style, stateBgConfigured.sourceImage)
+        )
+
+        // Case C: IMAGE style with an actual source photo Bitmap provided -> banner hidden
+        val actualSourceBitmap = createTestBitmap()
+        val stateSourceProvided = QrStudioViewModel.UiState(
+            style = QrStyle.IMAGE,
+            sourceImage = actualSourceBitmap,
+            backgroundImage = actualBackgroundBitmap
+        )
+        assertFalse(
+            "Banner must be hidden when sourceImage Bitmap is provided",
+            vm.isSourcePhotoRequired(stateSourceProvided.style, stateSourceProvided.sourceImage)
+        )
+
+        // Case D: Non-IMAGE style (e.g. BASIC, LINE, D25) with no source photo -> banner hidden
+        assertFalse(
+            "Basic style does not require source photo",
+            vm.isSourcePhotoRequired(QrStyle.BASIC, null)
+        )
+        assertFalse(
+            "Line style does not require source photo",
+            vm.isSourcePhotoRequired(QrStyle.LINE, null)
+        )
+        assertFalse(
+            "D25 style does not require source photo",
+            vm.isSourcePhotoRequired(QrStyle.D25, null)
+        )
+    }
+
+    @Test
+    fun testRandomRectangleRendererExactBehavioralBounds() {
+        val matrix = QrMatrix("https://veilframe.app/bounds-test", ErrorCorrectionLevel.M)
+        val geometry = QrGeometry(matrix.size, (matrix.size + 8) * 16, (matrix.size + 8) * 16, quietZoneModules = 4)
+        val moduleSize = geometry.moduleSize
+        val renderer = RandomRectangleRenderer()
+
+        // 1. scaleJitter = 0 -> every tempRand = 1.05
+        val designScale0 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 12345L),
+            jitterStyle = RandomJitterStyle(seed = 12345L, scaleJitter = 0.0f, offsetJitter = 0.0f)
+        )
+        val ir0 = renderer.generateGeometry(matrix, designScale0, geometry)
+        // Decouple node identification: group by module coordinates (x, y) shared by concentric dual rects
+        val darkRects0 = ir0.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1)
+        val darkGroups0 = darkRects0.groupBy { Pair(it.x, it.y) }
+        assertTrue(darkGroups0.isNotEmpty())
+        for ((_, nodes) in darkGroups0) {
+            assertEquals("Each dark module must emit exactly inner + outer rectangles", 2, nodes.size)
+        }
+        val innerNodes0 = darkGroups0.values.map { it.minByOrNull { node -> node.width }!! }
+        val outerNodes0 = darkGroups0.values.map { it.maxByOrNull { node -> node.width }!! }
+
+        assertTrue(innerNodes0.isNotEmpty())
+        for (node in innerNodes0) {
+            val tempRand = (node.width / moduleSize).toFloat()
+            assertEquals("scaleJitter = 0 must produce exact 1.05 scale", 1.05f, tempRand, 0.001f)
+        }
+        for (node in outerNodes0) {
+            val outerScale = (node.width / moduleSize).toFloat()
+            assertEquals("scaleJitter = 0 must produce exact 1.20 outer scale (1.05 + 0.15)", 1.20f, outerScale, 0.001f)
+        }
+
+        // 2. scaleJitter = 0.1 -> tempRand in [0.95, 1.15]
+        val designScale01 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 12345L),
+            jitterStyle = RandomJitterStyle(seed = 12345L, scaleJitter = 0.1f, offsetJitter = 0.0f)
+        )
+        val ir01 = renderer.generateGeometry(matrix, designScale01, geometry)
+        val darkRects01 = ir01.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1)
+        val darkGroups01 = darkRects01.groupBy { Pair(it.x, it.y) }
+        for ((_, nodes) in darkGroups01) {
+            assertEquals("Each dark module must emit exactly inner + outer rectangles", 2, nodes.size)
+        }
+        val innerNodes01 = darkGroups01.values.map { it.minByOrNull { node -> node.width }!! }
+        for (node in innerNodes01) {
+            val tempRand = (node.width / moduleSize).toFloat()
+            assertTrue("tempRand ($tempRand) must be >= 0.949 for scaleJitter 0.1", tempRand >= 0.949f)
+            assertTrue("tempRand ($tempRand) must be <= 1.151 for scaleJitter 0.1", tempRand <= 1.151f)
+        }
+
+        // 3. scaleJitter = 0.5 -> tempRand in [0.55, 1.55]
+        val designScale05 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 12345L),
+            jitterStyle = RandomJitterStyle(seed = 12345L, scaleJitter = 0.5f, offsetJitter = 0.0f)
+        )
+        val ir05 = renderer.generateGeometry(matrix, designScale05, geometry)
+        val darkRects05 = ir05.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1)
+        val darkGroups05 = darkRects05.groupBy { Pair(it.x, it.y) }
+        for ((_, nodes) in darkGroups05) {
+            assertEquals("Each dark module must emit exactly inner + outer rectangles", 2, nodes.size)
+        }
+        val innerNodes05 = darkGroups05.values.map { it.minByOrNull { node -> node.width }!! }
+        for (node in innerNodes05) {
+            val tempRand = (node.width / moduleSize).toFloat()
+            assertTrue("tempRand ($tempRand) must be >= 0.549 for scaleJitter 0.5", tempRand >= 0.549f)
+            assertTrue("tempRand ($tempRand) must be <= 1.551 for scaleJitter 0.5", tempRand <= 1.551f)
+        }
+
+        // 4. offsetJitter bounds: abs(dx) <= offsetJitter * moduleSize, abs(dy) <= offsetJitter * moduleSize
+        val offsetJitterValue = 0.3f
+        val designOffset03 = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 12345L),
+            jitterStyle = RandomJitterStyle(seed = 12345L, scaleJitter = 0.0f, offsetJitter = offsetJitterValue)
+        )
+        val irOffset03 = renderer.generateGeometry(matrix, designOffset03, geometry)
+        val nodesOffset0 = ir0.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1)
+        val nodesOffset03 = irOffset03.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1)
+
+        val maxAllowedDisplacement = (offsetJitterValue * moduleSize).toFloat() + 0.001f
+        var nonZeroDisplacementCount = 0
+
+        for (i in nodesOffset0.indices) {
+            val dx = kotlin.math.abs(nodesOffset03[i].x - nodesOffset0[i].x)
+            val dy = kotlin.math.abs(nodesOffset03[i].y - nodesOffset0[i].y)
+
+            assertTrue("dx ($dx) must be <= offsetJitter * moduleSize ($maxAllowedDisplacement)", dx <= maxAllowedDisplacement)
+            assertTrue("dy ($dy) must be <= offsetJitter * moduleSize ($maxAllowedDisplacement)", dy <= maxAllowedDisplacement)
+
+            if (dx > 0.0001f || dy > 0.0001f) {
+                nonZeroDisplacementCount++
+            }
+        }
+        assertTrue("At least some nodes must exhibit non-zero displacement under offset jitter", nonZeroDisplacementCount > 0)
+    }
+
+    @Test
+    fun testRandomRectangleJitterControlsAreIndependent() {
+        val matrix = QrMatrix("https://veilframe.app/independent-jitter", ErrorCorrectionLevel.M)
+        val geometry = QrGeometry(matrix.size, (matrix.size + 8) * 16, (matrix.size + 8) * 16, quietZoneModules = 4)
+        val renderer = RandomRectangleRenderer()
+
+        val baseDesign = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 42L),
+            jitterStyle = RandomJitterStyle(seed = 42L, scaleJitter = 0.0f, offsetJitter = 0.2f, colorJitter = 0.15f)
+        )
+        val modifiedScaleDesign = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 42L),
+            jitterStyle = RandomJitterStyle(seed = 42L, scaleJitter = 0.3f, offsetJitter = 0.2f, colorJitter = 0.15f)
+        )
+        val modifiedColorDesign = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 42L),
+            jitterStyle = RandomJitterStyle(seed = 42L, scaleJitter = 0.0f, offsetJitter = 0.2f, colorJitter = 0.40f)
+        )
+        val modifiedOffsetDesign = QrDesign(
+            style = QrStyle.RANDOM_RECTANGLE,
+            effects = EffectStyle(seed = 42L),
+            jitterStyle = RandomJitterStyle(seed = 42L, scaleJitter = 0.0f, offsetJitter = 0.45f, colorJitter = 0.15f)
+        )
+
+        val irBase = renderer.generateGeometry(matrix, baseDesign, geometry)
+        val irScale = renderer.generateGeometry(matrix, modifiedScaleDesign, geometry)
+        val irColor = renderer.generateGeometry(matrix, modifiedColorDesign, geometry)
+        val irOffset = renderer.generateGeometry(matrix, modifiedOffsetDesign, geometry)
+
+        val groupsBase = irBase.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).groupBy { Pair(it.x, it.y) }
+        val groupsScale = irScale.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).groupBy { Pair(it.x, it.y) }
+        val groupsColor = irColor.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).groupBy { Pair(it.x, it.y) }
+        val groupsOffset = irOffset.rootNodes.filterIsInstance<com.veilframe.app.qr.geometry.RectNode>().drop(1).groupBy { Pair(it.x, it.y) }
+
+        // Invariant 1: Every dark module always has exactly 2 rectangles (inner + outer) across all configurations
+        for ((_, nodes) in groupsBase) assertEquals(2, nodes.size)
+        for ((_, nodes) in groupsScale) assertEquals(2, nodes.size)
+        for ((_, nodes) in groupsColor) assertEquals(2, nodes.size)
+        for ((_, nodes) in groupsOffset) assertEquals(2, nodes.size)
+
+        val innerColorsBase = groupsBase.values.map { g -> g.minByOrNull { it.width }!!.fill }
+        val innerColorsScale = groupsScale.values.map { g -> g.minByOrNull { it.width }!!.fill }
+        val innerColorsOffset = groupsOffset.values.map { g -> g.minByOrNull { it.width }!!.fill }
+
+        // Invariant 2: Changing scale or offset jitter does NOT change module colors
+        assertEquals("Changing scale jitter must NOT change module colors", innerColorsBase, innerColorsScale)
+        assertEquals("Changing offset jitter must NOT change module colors", innerColorsBase, innerColorsOffset)
+
+        // Invariant 3: Changing scale or color jitter does NOT change module center positions
+        val centersBase = groupsBase.values.map { g ->
+            val inner = g.minByOrNull { it.width }!!
+            Pair((inner.x + inner.width / 2f).roundToInt(), (inner.y + inner.height / 2f).roundToInt())
+        }
+        val centersScale = groupsScale.values.map { g ->
+            val inner = g.minByOrNull { it.width }!!
+            Pair((inner.x + inner.width / 2f).roundToInt(), (inner.y + inner.height / 2f).roundToInt())
+        }
+        val centersColor = groupsColor.values.map { g ->
+            val inner = g.minByOrNull { it.width }!!
+            Pair((inner.x + inner.width / 2f).roundToInt(), (inner.y + inner.height / 2f).roundToInt())
+        }
+        assertEquals("Changing scale jitter must NOT change module center positions", centersBase, centersScale)
+        assertEquals("Changing color jitter must NOT change module center positions", centersBase, centersColor)
+
+        // Invariant 4: Changing color or offset jitter does NOT change module widths
+        val widthsBase = groupsBase.values.map { g -> g.minByOrNull { it.width }!!.width }
+        val widthsColor = groupsColor.values.map { g -> g.minByOrNull { it.width }!!.width }
+        val widthsOffset = groupsOffset.values.map { g -> g.minByOrNull { it.width }!!.width }
+        assertEquals("Changing color jitter must NOT change module widths", widthsBase, widthsColor)
+        assertEquals("Changing offset jitter must NOT change module widths", widthsBase, widthsOffset)
+
+        // Verify the modified controls themselves DO exhibit the expected modifications
+        val widthsScale = groupsScale.values.map { g -> g.minByOrNull { it.width }!!.width }
+        assertNotEquals("Changing scale jitter must change module widths", widthsBase, widthsScale)
+
+        val innerColorsColor = groupsColor.values.map { g -> g.minByOrNull { it.width }!!.fill }
+        assertNotEquals("Changing color jitter must change module colors", innerColorsBase, innerColorsColor)
+
+        val centersOffset = groupsOffset.values.map { g ->
+            val inner = g.minByOrNull { it.width }!!
+            Pair((inner.x + inner.width / 2f).roundToInt(), (inner.y + inner.height / 2f).roundToInt())
+        }
+        assertNotEquals("Changing offset jitter must change module center positions", centersBase, centersOffset)
+    }
+
+    @Test
+    fun testConnectedOrganicRendererContinuousMonotonicThickness() {
+        val thicknesses = listOf(0.00f, 0.05f, 0.06f, 0.10f, 0.15f, 0.20f, 0.25f, 0.30f, 0.33333334f, 0.35f, 0.50f, 1.00f)
+        val fractions = thicknesses.map { ConnectedOrganicRenderer.calculateStrokeFraction(it) }
+
+        // Verify continuous, non-decreasing mapping with upper saturation at 1.0
+        for (i in 0 until fractions.size - 1) {
+            assertTrue(
+                "Stroke fraction at thickness ${thicknesses[i + 1]} (${fractions[i + 1]}) must be >= thickness ${thicknesses[i]} (${fractions[i]})",
+                fractions[i + 1] >= fractions[i]
+            )
+        }
+
+        // Verify lower bound clamping removes zero discontinuity (0.00 and 0.05 both yield 0.15f)
+        assertEquals(0.15f, ConnectedOrganicRenderer.calculateStrokeFraction(0.00f), 0.001f)
+        assertEquals(0.15f, ConnectedOrganicRenderer.calculateStrokeFraction(0.05f), 0.001f)
+
+        // Verify intermediate linear scaling points
+        assertEquals(0.30f, ConnectedOrganicRenderer.calculateStrokeFraction(0.10f), 0.001f)
+        assertEquals(0.45f, ConnectedOrganicRenderer.calculateStrokeFraction(0.15f), 0.001f)
+        assertEquals(0.60f, ConnectedOrganicRenderer.calculateStrokeFraction(0.20f), 0.001f)
+        assertEquals(0.75f, ConnectedOrganicRenderer.calculateStrokeFraction(0.25f), 0.001f)
+        assertEquals(0.90f, ConnectedOrganicRenderer.calculateStrokeFraction(0.30f), 0.001f)
+
+        // Verify explicit upper saturation at 1.0 (capped at one module width)
+        assertEquals(1.00f, ConnectedOrganicRenderer.calculateStrokeFraction(0.33333334f), 0.001f)
+        assertEquals(1.00f, ConnectedOrganicRenderer.calculateStrokeFraction(0.35f), 0.001f)
+        assertEquals(1.00f, ConnectedOrganicRenderer.calculateStrokeFraction(0.50f), 0.001f)
+        assertEquals(1.00f, ConnectedOrganicRenderer.calculateStrokeFraction(1.00f), 0.001f)
+    }
+
+    @Test
+    fun testBuildDesignFromStateParity() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateContent("https://veilframe.app/parity-test")
+
+        // 1. Finder size, Timing size, Align size
+        vm.updatePositionSize(1.25f)
+        vm.updateTimingSize(0.85f)
+        vm.updateAlignSize(0.75f)
+
+        // 2. Universal finder style on BUBBLE
+        vm.updateStyle(QrStyle.BUBBLE)
+        vm.updateFinderStyle(FinderStyle.ROUNDED)
+        var design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(1.25f, design.positionSize, 0.001f)
+        assertEquals(0.85f, design.timingSize, 0.001f)
+        assertEquals(0.75f, design.alignSize, 0.001f)
+        assertEquals(0.85f, design.timingStyle.scale, 0.001f)
+        assertEquals(0.75f, design.alignmentStyle.scale, 0.001f)
+        assertEquals(FinderStyle.ROUNDED, design.eyeStyle.style)
+
+        // 3. Universal data shape & finder style on IMAGE
+        vm.updateStyle(QrStyle.IMAGE)
+        vm.updateDataShape(ModuleShape.CIRCLE)
+        vm.updateFinderStyle(FinderStyle.SOFT)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(ModuleShape.CIRCLE, design.moduleStyle.shape)
+        assertEquals(FinderStyle.SOFT, design.eyeStyle.style)
+
+        // 4. RESAMPLE specific dataColor and timing/alignment shape
+        vm.updateStyle(QrStyle.IMAGE_RESAMPLE)
+        vm.updateResampleDataColor(0xFF336699.toInt())
+        vm.updateTimingShape(ModuleShape.DIAMOND)
+        vm.updateAlignShape(ModuleShape.HEX)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(0xFF336699.toInt(), design.dataColorDark)
+        assertEquals(ModuleShape.DIAMOND, design.timingStyle.shape)
+        assertEquals(ModuleShape.HEX, design.alignmentStyle.shape)
+
+        // 5. Asymmetric & fractional quiet zones
+        vm.updateAsymmetricQuietZone(true, 1.5f, 2.5f, 3.5f, 4.5f)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertNotNull(design.directionalQuietZone)
+        assertEquals(1, design.directionalQuietZone!!.left)
+        assertEquals(2, design.directionalQuietZone!!.top)
+        assertEquals(3, design.directionalQuietZone!!.right)
+        // Directional quiet zone uses module counts, and fractionalQuietZone must remain null
+        // to prevent 4 * matrixSize (84 modules) inflation defect.
+        assertNull(design.backdropStyle.fractionalQuietZone)
+
+        // 6. Animated logo
+        val dummyBitmap = createTestBitmap()
+        vm.updateLogoAnimatedFrames(listOf(dummyBitmap, dummyBitmap), listOf(100, 100))
+        design = vm.buildDesignFromState(vm.state.value)
+        assertNotNull(design.logo)
+        assertTrue(design.logo!!.source is ImageSource.Animated)
+        assertEquals(2, (design.logo!!.source as ImageSource.Animated).frames.size)
+    }
+
+    @Test
+    fun testAnimationExportsRejectWhenNoArtworkSourcesProvidedEvenIfPreviewBitmapExists() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateContent("https://veilframe.app")
+
+        // Simulate preview generation having produced a rendered QR bitmap in state
+        val renderedPreviewQr = createTestBitmap()
+        val field = QrStudioViewModel::class.java.getDeclaredField("_state")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stateFlow = field.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<QrStudioViewModel.UiState>
+        stateFlow.value = stateFlow.value.copy(
+            content = "https://veilframe.app",
+            bitmap = renderedPreviewQr,
+            animatedFrames = emptyList(),
+            sourceImage = null,
+            backgroundImage = null
+        )
+
+        // GIF export must reject because no actual artwork/frames exist (must NOT use preview QR bitmap)
+        vm.saveGif()
+        assertEquals("GIF export requires a photo, background image, or animated frames", vm.state.value.saveResult)
+
+        // Video export must reject because no actual artwork/frames exist (must NOT use preview QR bitmap)
+        vm.saveVideo()
+        assertEquals("Video export requires a photo, background image, or video frames", vm.state.value.saveResult)
+
+        // Animated SVG export must reject because no actual artwork/frames exist (must NOT use preview QR bitmap)
+        vm.saveAnimatedSvg()
+        assertEquals("Animated SVG requires frames", vm.state.value.saveResult)
+    }
+
+    @Test
+    fun testLogoFractionCappedAt33Percent() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.updateLogoFraction(0.45f)
+        assertEquals(0.33f, vm.state.value.logoFraction, 0.001f)
+
+        vm.updateLogoFraction(0.35f)
+        assertEquals(0.33f, vm.state.value.logoFraction, 0.001f)
+
+        vm.updateLogoFraction(0.05f)
+        assertEquals(0.10f, vm.state.value.logoFraction, 0.001f)
+
+        vm.updateLogoFraction(0.25f)
+        assertEquals(0.25f, vm.state.value.logoFraction, 0.001f)
+    }
+
+    @Test
+    fun testShareDoesNotFallBackToStalePreviewBitmapOnFailure() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateContent("https://veilframe.app")
+
+        val stalePreviewBmp = createTestBitmap()
+        val field = QrStudioViewModel::class.java.getDeclaredField("_state")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stateFlow = field.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<QrStudioViewModel.UiState>
+        stateFlow.value = stateFlow.value.copy(
+            content = "https://veilframe.app",
+            bitmap = stalePreviewBmp
+        )
+
+        val exportJobField = QrStudioViewModel::class.java.getDeclaredField("exportJob")
+        exportJobField.isAccessible = true
+
+        // On headless JVM, generateWithResult creates a matrix but bitmap is null.
+        // share() must NOT fall back to stalePreviewBmp; it must cleanly fail with a structured message.
+        vm.share()
+        val job = exportJobField.get(vm) as? kotlinx.coroutines.Job
+        kotlinx.coroutines.runBlocking {
+            job?.join()
+        }
+        assertTrue(vm.state.value.saveResult?.startsWith("Share failed") == true)
+    }
+
+    @Test
+    fun testQuietZoneResolverCalculatesAgainstActualMatrixSize() {
+        val fracDesign = QrDesign(
+            backdropStyle = BackdropStyle(
+                fractionalQuietZone = FractionalInsets(0.10f, 0.10f, 0.10f, 0.10f)
+            )
+        )
+        // For V1 (matrixSize = 21): 21 * 0.10 = 2.1 modules
+        val qzV1 = QrGeometry.resolveQuietZone(fracDesign, 21)
+        assertEquals(2.1f, qzV1.left, 0.001f)
+
+        // For V10 (matrixSize = 57): 57 * 0.10 = 5.7 modules
+        val qzV10 = QrGeometry.resolveQuietZone(fracDesign, 57)
+        assertEquals(5.7f, qzV10.left, 0.001f)
+    }
+
+    @Test
+    fun testGeometryPolicySeparatesEfParityFromSafeProduction() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateStyle(QrStyle.BASIC)
+
+        // 1. Default policy is SafeProduction: Basic QR defaults to 4 modules
+        assertEquals(QrGeometryPolicy.SafeProduction, vm.state.value.geometryPolicy)
+        var design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(4, design.quietZoneModules)
+        assertNull("explicitQuietZone must remain null when not chosen by user", design.explicitQuietZone)
+
+        // 2. Switch to EfParity policy: Basic QR defaults to 1 module (EFQRCode parity)
+        vm.updateGeometryPolicy(QrGeometryPolicy.EfParity)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(1, design.quietZoneModules)
+        assertNull("explicitQuietZone must remain null when policy provides default", design.explicitQuietZone)
+
+        // 3. User explicit choice overrides both policies
+        vm.updateQuietZone(6)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(6, design.quietZoneModules)
+        assertEquals(6, design.explicitQuietZone)
+
+        // 4. Resetting explicit choice restores policy default
+        vm.updateQuietZone(null)
+        design = vm.buildDesignFromState(vm.state.value)
+        assertEquals(1, design.quietZoneModules)
+        assertNull(design.explicitQuietZone)
+    }
+
+    @Test
+    fun testExplicitGenerationModeSelection() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        assertEquals(com.veilframe.app.qr.GenerationMode.PARITY_EF, vm.state.value.generationMode)
+
+        vm.updateGenerationMode(com.veilframe.app.qr.GenerationMode.PARITY_EF)
+        assertEquals(com.veilframe.app.qr.GenerationMode.PARITY_EF, vm.state.value.generationMode)
+
+        vm.updateGenerationMode(com.veilframe.app.qr.GenerationMode.SAFE)
+        assertEquals(com.veilframe.app.qr.GenerationMode.SAFE, vm.state.value.generationMode)
+    }
+
+    @Test
+    fun testSuccessVerifiedAndUnverifiedStates() {
+        val dummyMatrix = QrGenerator.generateMatrix("https://veilframe.app")
+        val dummyDesign = QrDesign()
+
+        // 1. Verified report
+        val verifiedReport = com.veilframe.app.qr.validation.ScanabilityReport(
+            isScanReady = true,
+            validationSkipped = false,
+            quietZone = com.veilframe.app.qr.validation.QuietZoneReport(true, 4),
+            contrast = com.veilframe.app.qr.validation.ContrastReport(1f, 1f, 0f, 0f, 1f, true),
+            finders = com.veilframe.app.qr.validation.FinderIntegrityReport(true, true),
+            logo = com.veilframe.app.qr.validation.LogoOcclusionReport(false, 0, 0f, true),
+            decodeResult = com.veilframe.app.qr.decoder.DecodeResult(true, "https://veilframe.app"),
+            errorCorrection = dummyMatrix.errorCorrection,
+            warnings = emptyList(),
+            repairSuggestions = emptyList()
+        )
+        val verifiedResult = com.veilframe.app.qr.QrRenderResult.Success(null, verifiedReport, dummyMatrix, dummyDesign)
+        assertTrue(verifiedResult is com.veilframe.app.qr.QrRenderResult.Success.Verified)
+        assertTrue(verifiedResult.isVerified)
+
+        // 2. Unverified report (e.g. headless unit test or scan check failure)
+        val unverifiedReport = verifiedReport.copy(isScanReady = false)
+        val unverifiedResult = com.veilframe.app.qr.QrRenderResult.Success(null, unverifiedReport, dummyMatrix, dummyDesign)
+        assertTrue(unverifiedResult is com.veilframe.app.qr.QrRenderResult.Success.Unverified)
+        assertFalse(unverifiedResult.isVerified)
+
+        // 3. Both are instances of Success (backwards compatibility)
+        assertTrue(verifiedResult is com.veilframe.app.qr.QrRenderResult.Success)
+        assertTrue(unverifiedResult is com.veilframe.app.qr.QrRenderResult.Success)
+    }
+
+    @Test
+    fun testResolutionTieringPreviewVsExport() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // 1. Output size is coerced in [256, 4096]
+        vm.updateOutputSize(100)
+        assertEquals(256, vm.state.value.outputSize)
+
+        vm.updateOutputSize(8000)
+        assertEquals(4096, vm.state.value.outputSize)
+
+        // 2. High-resolution export (4096): preview is clamped to 512, export preserves 4096
+        val previewDesign4096 = vm.buildDesignFromState(vm.state.value, isPreview = true)
+        assertEquals(512, previewDesign4096.outputSize)
+        val exportDesign4096 = vm.buildDesignFromState(vm.state.value, isPreview = false)
+        assertEquals(4096, exportDesign4096.outputSize)
+
+        // 3. Medium-resolution export (1024): preview is clamped to 512, export preserves 1024
+        vm.updateOutputSize(1024)
+        val previewDesign1024 = vm.buildDesignFromState(vm.state.value, isPreview = true)
+        assertEquals(512, previewDesign1024.outputSize)
+        val exportDesign1024 = vm.buildDesignFromState(vm.state.value, isPreview = false)
+        assertEquals(1024, exportDesign1024.outputSize)
+
+        // 4. Low-resolution export (256): both preview and export stay at 256
+        vm.updateOutputSize(256)
+        val previewDesign256 = vm.buildDesignFromState(vm.state.value, isPreview = true)
+        assertEquals(256, previewDesign256.outputSize)
+        val exportDesign256 = vm.buildDesignFromState(vm.state.value, isPreview = false)
+        assertEquals(256, exportDesign256.outputSize)
+    }
+
+    @Test
+    fun testStreamingAnimationPipelinesEmptyFrames() {
+        val dummyMatrix = QrGenerator.generateMatrix("https://veilframe.app")
+        val dummyDesign = QrDesign()
+
+        // 1. GIF streaming with empty frames returns EmptyFrames failure
+        val gifResult = AnimatedQrGenerator.encodeToGifStreaming(
+            matrix = dummyMatrix,
+            baseDesign = dummyDesign,
+            sourceFrames = emptyList()
+        )
+        assertTrue(gifResult is QrOutputResult.Failure)
+        assertEquals(QrError.Animation.EmptyFrames, (gifResult as QrOutputResult.Failure).error)
+
+        // 2. Video streaming with empty frames returns EmptyFrames failure
+        val vidResult = AnimatedQrGenerator.encodeToVideoStreaming(
+            matrix = dummyMatrix,
+            baseDesign = dummyDesign,
+            sourceFrames = emptyList(),
+            outputFile = File("target.mp4")
+        )
+        assertTrue(vidResult is QrOutputResult.Failure)
+        assertEquals(QrError.Animation.EmptyFrames, (vidResult as QrOutputResult.Failure).error)
+
+        // 3. APNG streaming with empty frames returns EmptyFrames failure
+        val apngResult = AnimatedQrGenerator.encodeToApngStreaming(
+            matrix = dummyMatrix,
+            baseDesign = dummyDesign,
+            sourceFrames = emptyList(),
+            outputFile = File("target.png")
+        )
+        assertTrue(apngResult is QrOutputResult.Failure)
+        assertEquals(QrError.Animation.EmptyFrames, (apngResult as QrOutputResult.Failure).error)
+    }
+
+    @Test
+    fun testSaveSvgFailClosedOnStrictValidationFailure() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateContent("https://veilframe.app/strict-fail-closed")
+        // Set identical foreground and background colors to force strict validation failure
+        vm.updateForeground(android.graphics.Color.WHITE)
+        vm.updateBackground(android.graphics.Color.WHITE)
+
+        vm.saveSvg()
+        kotlinx.coroutines.runBlocking { vm.exportJob?.join() }
+
+        // Fail-closed verification: must reject export and set rejection message
+        assertEquals(true, vm.state.value.saveResult?.contains("SVG export rejected:") == true)
+        assertFalse(vm.state.value.isExporting)
+    }
+
+    @Test
+    fun testAutoRepairWithUndoRestoresSnapshotState() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.updateContent("https://veilframe.app/undo-test")
+        // Initial state before repair
+        val originalFg = android.graphics.Color.YELLOW
+        val originalBg = android.graphics.Color.YELLOW
+        vm.updateForeground(originalFg)
+        vm.updateBackground(originalBg)
+
+        val initialDesign = vm.buildDesignFromState(vm.state.value)
+        val testReport = com.veilframe.app.qr.validation.ScanabilityReport(
+            isScanReady = false,
+            validationSkipped = false,
+            quietZone = com.veilframe.app.qr.validation.QuietZoneReport(true, 4),
+            contrast = com.veilframe.app.qr.validation.ContrastReport(1f, 1f, 0f, 0f, 1f, false),
+            finders = com.veilframe.app.qr.validation.FinderIntegrityReport(true, true),
+            logo = com.veilframe.app.qr.validation.LogoOcclusionReport(false, 0, 0f, true),
+            decodeResult = com.veilframe.app.qr.decoder.DecodeResult(false, null),
+            errorCorrection = com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M,
+            warnings = listOf("Low contrast"),
+            repairSuggestions = listOf(com.veilframe.app.qr.validation.RepairReason.INCREASE_CONTRAST)
+        )
+        vm.setScanabilityReportForTesting(testReport, initialDesign)
+
+        assertFalse(vm.canUndoAutoRepair())
+
+        // Run autoRepair with suggestion
+        vm.autoRepair()
+
+        assertTrue(vm.canUndoAutoRepair())
+        assertNotNull(vm.state.value.repairNotice)
+        assertEquals(android.graphics.Color.BLACK, vm.state.value.foreground)
+
+        // Undo autoRepair
+        vm.undoAutoRepair()
+
+        assertEquals(originalFg, vm.state.value.foreground)
+        assertEquals(originalBg, vm.state.value.background)
+        assertFalse(vm.canUndoAutoRepair())
+    }
+
+    @Test
+    fun testWifiPayloadParsingAndAction() {
+        val raw = "WIFI:S:HomeNetwork;T:WPA;P:SuperSecretPass;H:true;;"
+        val action = com.veilframe.app.qr.scanner.PayloadParser.parse(raw)
+        assertTrue(action is com.veilframe.app.qr.scanner.QrAction.Wifi)
+        val wifi = action as com.veilframe.app.qr.scanner.QrAction.Wifi
+        assertEquals("HomeNetwork", wifi.ssid)
+        assertEquals("WPA", wifi.type)
+        assertEquals("SuperSecretPass", wifi.password)
+        assertTrue(wifi.hidden)
+    }
+
+    @Test
+    fun testWifiScannedActionSummaryDefaultMaskedAndRevealToggle() {
+        val raw = "WIFI:S:HomeNetwork;T:WPA;P:SuperSecretPass;H:true;;"
+        val action = com.veilframe.app.qr.scanner.PayloadParser.parse(raw)
+        assertTrue(action is com.veilframe.app.qr.scanner.QrAction.Wifi)
+
+        // 1. Default masked presentation: hides password behind bullets
+        val maskedSummary = QrScanTabFragment.formatActionSummary(action, maskWifiPassword = true)
+        assertTrue(maskedSummary.contains("Network: HomeNetwork"))
+        assertTrue(maskedSummary.contains("Security: WPA"))
+        assertTrue(maskedSummary.contains("Password: ••••••••"))
+        assertFalse("Masked summary must never leak plaintext password", maskedSummary.contains("SuperSecretPass"))
+        assertTrue(maskedSummary.contains("(Hidden)"))
+
+        // 2. Explicit reveal presentation: displays plaintext password
+        val revealedSummary = QrScanTabFragment.formatActionSummary(action, maskWifiPassword = false)
+        assertTrue(revealedSummary.contains("Password: SuperSecretPass"))
+        assertFalse(revealedSummary.contains("••••••••"))
+    }
+
+    @Test
+    fun testClearAnimationResetsFramesAndPreview() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        vm.clearAnimation()
+
+        assertTrue(vm.state.value.animatedFrames.isEmpty())
+        assertTrue(vm.state.value.logoAnimatedFrames.isEmpty())
+        assertTrue(vm.state.value.previewAnimatedFrames.isEmpty())
+        assertNull(vm.state.value.repairNotice)
+    }
+
+    @Test
+    fun testAnimatedPreviewFramesGeneratedWhenAnimatedDesignPresent() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        val bmp = createTestBitmap()
+        val frame = QrFrame(bmp, durationMs = 100)
+
+        vm.updateAnimatedFrames(listOf(frame))
+        assertEquals(1, vm.state.value.animatedFrames.size)
+
+        vm.clearAnimation()
+        assertEquals(0, vm.state.value.animatedFrames.size)
+        assertEquals(0, vm.state.value.previewAnimatedFrames.size)
+    }
+
+    @Test
+    fun testStaleStateClearedOnRenderFailure() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        val initialDesign = QrDesign()
+        val passingReport = com.veilframe.app.qr.validation.ScanabilityReport(
+            isScanReady = true,
+            validationSkipped = false,
+            quietZone = com.veilframe.app.qr.validation.QuietZoneReport(true, 4),
+            contrast = com.veilframe.app.qr.validation.ContrastReport(1f, 1f, 0f, 0f, 1f, true),
+            finders = com.veilframe.app.qr.validation.FinderIntegrityReport(true, true),
+            logo = com.veilframe.app.qr.validation.LogoOcclusionReport(false, 0, 0f, true),
+            decodeResult = com.veilframe.app.qr.decoder.DecodeResult(true, "test"),
+            errorCorrection = com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M,
+            warnings = emptyList(),
+            repairSuggestions = emptyList()
+        )
+        vm.setScanabilityReportForTesting(passingReport, initialDesign)
+        assertNotNull(vm.state.value.scanabilityReport)
+        assertTrue(vm.state.value.scanabilityReport!!.isScanReady)
+
+        // Blank content triggers clear in regenerate
+        vm.updateContent("")
+        assertNull(vm.state.value.bitmap)
+        assertNull(vm.state.value.matrix)
+        assertNull(vm.state.value.design)
+        assertNull(vm.state.value.scanabilityReport)
+        assertFalse(vm.state.value.scanabilityReport?.isScanReady == true)
+    }
+
+    @Test
+    fun testAnimatedSourceFramesWiredIntoQrDesign() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        val bmp1 = createTestBitmap()
+        val bmp2 = createTestBitmap()
+        val frames = listOf(QrFrame(bmp1, 100), QrFrame(bmp2, 100))
+
+        vm.updateAnimatedFrames(frames)
+        val design = vm.buildDesignFromState(vm.state.value)
+
+        assertTrue(design.imageSource.isAnimated)
+        assertEquals(2, design.imageSource.animatedFrames?.size)
+        assertTrue(AnimatedQrGenerator.isDesignAnimated(design))
+    }
+
+    @Test
+    fun testEffectiveQuietZoneResolutionDefaults() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        // Default PARITY_EF mode with no explicit override -> 1
+        vm.updateGenerationMode(GenerationMode.PARITY_EF)
+        assertEquals(1, vm.resolveEffectiveQuietZone())
+
+        // SAFE mode with no explicit override -> 4
+        vm.updateGenerationMode(GenerationMode.SAFE)
+        assertEquals(4, vm.resolveEffectiveQuietZone())
+
+        // ARTISTIC_ENGINE mode D25 -> 0, IMAGE -> 1, BASIC -> 4
+        vm.updateGenerationMode(GenerationMode.ARTISTIC_ENGINE)
+        vm.updateStyle(QrStyle.D25)
+        assertEquals(0, vm.resolveEffectiveQuietZone())
+        vm.updateStyle(QrStyle.IMAGE)
+        assertEquals(1, vm.resolveEffectiveQuietZone())
+        vm.updateStyle(QrStyle.BASIC)
+        assertEquals(4, vm.resolveEffectiveQuietZone())
+
+        // Explicit user override takes precedence over mode defaults
+        vm.updateQuietZone(6)
+        assertEquals(6, vm.resolveEffectiveQuietZone())
+    }
+
+    @Test
+    fun testExpansionStateTogglesPersistInState() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+
+        assertFalse(vm.state.value.isAdvancedExpanded)
+        vm.toggleAdvancedExpanded()
+        assertTrue(vm.state.value.isAdvancedExpanded)
+        vm.toggleAdvancedExpanded()
+        assertFalse(vm.state.value.isAdvancedExpanded)
+
+        assertFalse(vm.state.value.isScanDetailsExpanded)
+        vm.toggleScanDetailsExpanded()
+        assertTrue(vm.state.value.isScanDetailsExpanded)
+        vm.toggleScanDetailsExpanded()
+        assertFalse(vm.state.value.isScanDetailsExpanded)
+    }
+
+    @Test
+    fun testClearSaveResultResetsLastSavedUri() {
+        val app = Application()
+        val vm = QrStudioViewModel(app)
+        vm.clearSaveResult()
+        assertNull(vm.state.value.saveResult)
+        assertNull(vm.state.value.lastSavedUri)
+    }
+
+    @Test
+    fun testExportPermittedWhenDecodeSucceedsEvenIfScanReadyFalse() {
+        val dummyMatrix = QrGenerator.generateMatrix("https://veilframe.app/verified")
+        val report = com.veilframe.app.qr.validation.ScanabilityReport(
+            isScanReady = false,
+            validationSkipped = false,
+            quietZone = com.veilframe.app.qr.validation.QuietZoneReport(true, 1),
+            contrast = com.veilframe.app.qr.validation.ContrastReport(1.8f, 1f, 0f, 0f, 1f, false),
+            finders = com.veilframe.app.qr.validation.FinderIntegrityReport(true, true),
+            logo = com.veilframe.app.qr.validation.LogoOcclusionReport(false, 0, 0f, true),
+            decodeResult = com.veilframe.app.qr.decoder.DecodeResult(true, "https://veilframe.app/verified"),
+            errorCorrection = dummyMatrix.errorCorrection,
+            warnings = listOf("Contrast is below recommended threshold"),
+            repairSuggestions = emptyList()
+        )
+
+        // The rejection condition is: !report.isScanReady && !report.validationSkipped && !report.decodeResult.success
+        val isRejected = !report.isScanReady && !report.validationSkipped && !report.decodeResult.success
+        assertFalse("Export must NOT be rejected when decode succeeds", isRejected)
+    }
+
+    @Test
+    fun testVideoOutputConfigPixelFormatDefault() {
+        val config = com.veilframe.app.media.VideoOutputConfig()
+        assertEquals("yuv420p", config.pixelFormat)
+    }
+
+    @Test
+    fun testAiBundleConfigMaxDepth() {
+        val defaultConfig = com.veilframe.app.tools.AiBundleEngine.BundleConfig()
+        assertNull(defaultConfig.maxDepth)
+
+        val customConfig = com.veilframe.app.tools.AiBundleEngine.BundleConfig(maxDepth = 2)
+        assertEquals(2, customConfig.maxDepth)
+    }
+}

@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/layoutMarkdownRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/colorBackground"
+    android:visibility="gone">
+
+    <!-- Top Navigation Toolbar -->
+    <LinearLayout
+        android:id="@+id/toolbarMarkdown"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/colorSurface"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:elevation="3dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownBack"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Back"
+            app:icon="@drawable/ic_arrow_back"
+            app:iconTint="@color/vf_text_primary" />
+
+        <TextView
+            android:id="@+id/tvMarkdownTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:text="README.md"
+            android:textColor="@color/vf_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownToc"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Table of Contents"
+            app:icon="@drawable/ic_toc"
+            app:iconTint="@color/vf_text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownSearch"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Find in document"
+            app:icon="@drawable/ic_search"
+            app:iconTint="@color/vf_text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownMenu"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="More options"
+            app:icon="@drawable/ic_menu"
+            app:iconTint="@color/vf_text_secondary" />
+    </LinearLayout>
+
+    <!-- Sub-Toolbar: Mode Switcher (GitHub-style Write / Preview) & Actions -->
+    <LinearLayout
+        android:id="@+id/layoutMarkdownSubToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/colorSurfaceContainer"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
+
+        <!-- Mode Toggle Segment: Preview vs Write -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/toggleMarkdownMode"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            app:singleSelection="true"
+            app:selectionRequired="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMarkdownTabPreview"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="Preview"
+                app:icon="@drawable/ic_visibility"
+                app:iconSize="14dp"
+                app:iconTint="@color/vf_text_primary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMarkdownTabWrite"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="Write"
+                app:icon="@drawable/ic_edit"
+                app:iconSize="14dp"
+                app:iconTint="@color/vf_text_primary" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Single Save As Action (Popping MD, PDF, DOCX) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownSaveAs"
+            style="@style/Widget.VeilFrame.Button.Action"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="Save As"
+            app:icon="@drawable/ic_action_save"
+            app:iconSize="14dp"
+            android:visibility="visible" />
+
+    </LinearLayout>
+
+    <!-- Collapsible In-Page Search Bar -->
+    <LinearLayout
+        android:id="@+id/layoutMarkdownSearch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/colorSurfaceContainer"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <EditText
+            android:id="@+id/etMarkdownSearch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="Find in page..."
+            android:textColor="@color/vf_text_primary"
+            android:textColorHint="@color/vf_text_muted"
+            android:textSize="13sp"
+            android:imeOptions="actionSearch"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/tvMarkdownSearchCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text=""
+            android:textColor="@color/vf_text_muted"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownSearchPrev"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Previous match"
+            app:icon="@drawable/ic_expand_less"
+            app:iconTint="@color/vf_text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownSearchNext"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Next match"
+            app:icon="@drawable/ic_expand_more"
+            app:iconTint="@color/vf_text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMarkdownSearchClose"
+            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Close search"
+            app:icon="@drawable/ic_close"
+            app:iconTint="@color/vf_text_secondary" />
+    </LinearLayout>
+
+    <!-- Document Loading Progress Indicator -->
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        style="@style/Widget.VeilFrame.Progress.Wavy"
+        android:id="@+id/progressMarkdownLoading"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:indeterminate="true"
+        android:visibility="gone"
+        app:indicatorColor="@color/vf_accent_green" />
+
+    <!-- Content Frame: WebView vs Live Editor vs Error State -->
+    <FrameLayout
+        android:id="@+id/layoutMarkdownContentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- 1. Offline Markdown WebView Surface -->
+        <WebView
+            android:id="@+id/wvMarkdown"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/vf_bg_dark" />
+
+        <!-- 2. Live Markdown Editor ("Write" Mode) -->
+        <ScrollView
+            android:id="@+id/layoutMarkdownEditor"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:background="@color/vf_bg_dark"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/etMarkdownSource"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top|start"
+                android:padding="16dp"
+                android:background="@null"
+                android:fontFamily="monospace"
+                android:hint="Type or paste Markdown here..."
+                android:textColor="@color/vf_text_primary"
+                android:textColorHint="@color/vf_text_muted"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.2"
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:scrollbars="vertical" />
+        </ScrollView>
+
+        <!-- 3. Renderer Error State View -->
+        <LinearLayout
+            android:id="@+id/layoutMarkdownError"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:background="@color/vf_bg_dark"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_close"
+                app:tint="@color/vf_accent_red"
+                android:contentDescription="Error" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Unable to render Markdown"
+                android:textColor="@color/vf_text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvMarkdownErrorDetails"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="The document engine encountered an unexpected rendering error."
+                android:textColor="@color/vf_text_secondary"
+                android:textSize="13sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="20dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMarkdownRetry"
+                    style="@style/Widget.VeilFrame.Button.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Retry"
+                    app:icon="@drawable/ic_reset"
+                    app:iconSize="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMarkdownSwitchToEditor"
+                    style="@style/Widget.VeilFrame.Button.Utility"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:text="Open in Editor"
+                    app:icon="@drawable/ic_edit"
+                    app:iconSize="16dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</LinearLayout>

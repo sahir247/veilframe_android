@@ -1,0 +1,70 @@
+name: VeilFrame Android CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  android-build-and-test:
+    name: Android Build, Hardening & Unit Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 cmake;3.22.1 ndk;26.1.10909125'
+
+      - name: CV Governance Ratchet
+        working-directory: android
+        run: |
+          chmod +x scripts/check_cv_governance.sh
+          bash scripts/check_cv_governance.sh
+
+      - name: Run Android Unit Test Suite
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --continue --stacktrace
+
+      - name: Assemble Debug APK
+        working-directory: android
+        run: |
+          ./gradlew :app:assembleDebug -x test
+
+      - name: Verify 16 KB Page Alignment on Packaged Native Libraries
+        working-directory: android
+        run: |
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            echo "Inspecting $APK_PATH for 16 KB page alignment..."
+            unzip -q -o "$APK_PATH" "lib/*" -d /tmp/apk_libs
+            for so in $(find /tmp/apk_libs -name "*.so"); do
+              echo "Checking $so"
+              readelf -l "$so" | grep -A 1 "LOAD" | head -n 4 || true
+            done
+          fi
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: veilframe-android-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14

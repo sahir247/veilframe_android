@@ -1,0 +1,321 @@
+package com.veilframe.app.qr.renderer
+
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.DashPathEffect
+import android.graphics.Paint
+import android.graphics.Path
+import com.veilframe.app.qr.model.FinderStyle
+import java.util.Locale
+
+/**
+ * Single source of truth for VeilFrame artistic position pattern rendering.
+ *
+ * Implements the 5 canonical VeilFrame position styles:
+ * - RECTANGLE / CLASSIC: 3x3 inner fill, 6x6 outer stroke
+ * - ROUND / CIRCLE: 1.5 radius inner circle, 3.0 radius outer stroke circle
+ * - ROUNDED_RECTANGLE / ROUNDED: 1.5 radius inner circle, sq25 squircle outer stroke
+ * - PLANETS: 1.5 inner circle, 3.0 dashed circle (0.5, 0.5), 4 satellite circles at dist 3
+ * - DSJ: Center rect of size 3 - (1 - posSize), 4 outer protruding tabs of width/height posSize
+ *
+ * Guarantees exact geometric and visual equivalence between Android Canvas and SVG Vector export.
+ */
+object VeilPositionPatternGeometry {
+
+    const val SQ25_PATH: String = "M32.048565,-1.29480038e-15 L67.951435,1.29480038e-15 C79.0954192,-7.52316311e-16 83.1364972,1.16032014 87.2105713,3.3391588 C91.2846454,5.51799746 94.4820025,8.71535463 96.6608412,12.7894287 C98.8396799,16.8635028 100,20.9045808 100,32.048565 L100,67.951435 C100,79.0954192 98.8396799,83.1364972 96.6608412,87.2105713 C94.4820025,91.2846454 91.2846454,94.4820025 87.2105713,96.6608412 C83.1364972,98.8396799 79.0954192,100 67.951435,100 L32.048565,100 C20.9045808,100 16.8635028,98.8396799 12.7894287,96.6608412 C8.71535463,94.4820025 5.51799746,91.2846454 3.3391588,87.2105713 C1.16032014,83.1364972 5.01544207e-16,79.0954192 -8.63200256e-16,67.951435 L8.63200256e-16,32.048565 C-5.01544207e-16,20.9045808 1.16032014,16.8635028 3.3391588,12.7894287 C5.51799746,8.71535463 8.71535463,5.51799746 12.7894287,3.3391588 C16.8635028,1.16032014 20.9045808,7.52316311e-16 32.048565,-1.29480038e-15 Z"
+
+    fun isFinderArea(x: Int, y: Int, nCount: Int): Boolean {
+        return (x < 7 && y < 7) || (x >= nCount - 7 && y < 7) || (x < 7 && y >= nCount - 7)
+    }
+
+    fun isPosCenter(x: Int, y: Int, nCount: Int): Boolean {
+        return (x == 3 && y == 3) || (x == nCount - 4 && y == 3) || (x == 3 && y == nCount - 4)
+    }
+
+    fun toIrNodes(
+        x: Int,
+        y: Int,
+        moduleSize: Float,
+        offsetX: Float,
+        offsetY: Float,
+        style: FinderStyle,
+        size: Float,
+        color: Int,
+        bgColor: Int = Color.WHITE
+    ): List<com.veilframe.app.qr.geometry.QrGeometryNode> {
+        val cs = moduleSize
+        val fx = offsetX + (x - 3) * cs
+        val fy = offsetY + (y - 3) * cs
+        val cx = fx + 3.5f * cs
+        val cy = fy + 3.5f * cs
+
+        val nodes = mutableListOf<com.veilframe.app.qr.geometry.QrGeometryNode>()
+        when (style) {
+            FinderStyle.CLASSIC -> {
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(fx + 2f * cs, fy + 2f * cs, 3f * cs, 3f * cs, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(fx + 0.5f * cs, fy + 0.5f * cs, 6f * cs, 6f * cs, stroke = color, strokeWidth = 1f * size * cs, fill = null))
+            }
+            FinderStyle.CIRCLE -> {
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy, 1.5f * cs, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy, 3.0f * cs, fill = null, stroke = color, strokeWidth = 1f * size * cs))
+            }
+            FinderStyle.ROUNDED -> {
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy, 1.5f * cs, fill = color))
+                val tx = cx - 3f * cs
+                val ty = cy - 3f * cs
+                val s = 6f * cs / 100f
+                val squirclePath = com.veilframe.app.qr.model.QrVisualGeometry.createSquirclePath(
+                    android.graphics.RectF(tx, ty, tx + 6f * cs, ty + 6f * cs)
+                )
+                nodes.add(com.veilframe.app.qr.geometry.PathNode(
+                    svgPathData = SQ25_PATH,
+                    androidPath = squirclePath,
+                    fill = null,
+                    stroke = color,
+                    strokeWidth = 100f / 6f * size,
+                    canvasStrokeWidth = 1f * size * cs,
+                    transform = String.format(Locale.US, "translate(%.4f,%.4f) scale(%.6f,%.6f)", tx, ty, s, s)
+                ))
+            }
+            FinderStyle.PLANETS -> {
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy, 1.5f * cs, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy, 3.0f * cs, fill = null, stroke = color, strokeWidth = 0.15f * cs, strokeDashArray = "0.5,0.5"))
+                val satR = 0.5f * size * cs
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx - 3f * cs, cy, satR, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx + 3f * cs, cy, satR, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy - 3f * cs, satR, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.CircleNode(cx, cy + 3f * cs, satR, fill = color))
+            }
+            FinderStyle.DSJ -> {
+                val posSize = size
+                val widthVal = (2.0f + posSize) * cs
+                val armDim = posSize * cs
+                val halfW = widthVal / 2.0f
+                val halfArm = armDim / 2.0f
+
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(cx - halfW, cy - halfW, widthVal, widthVal, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(cx - 3f * cs - halfArm, cy - halfW, armDim, widthVal, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(cx + 3f * cs - halfArm, cy - halfW, armDim, widthVal, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(cx - halfW, cy - 3f * cs - halfArm, widthVal, armDim, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(cx - halfW, cy + 3f * cs - halfArm, widthVal, armDim, fill = color))
+            }
+            else -> {
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(fx + 2f * cs, fy + 2f * cs, 3f * cs, 3f * cs, fill = color))
+                nodes.add(com.veilframe.app.qr.geometry.RectNode(fx + 0.5f * cs, fy + 0.5f * cs, 6f * cs, 6f * cs, stroke = color, strokeWidth = 1f * size * cs, fill = null))
+            }
+        }
+        return nodes
+    }
+
+    fun drawCanvas(
+        canvas: Canvas,
+        x: Int,
+        y: Int,
+        moduleSize: Float,
+        offsetX: Float,
+        offsetY: Float,
+        style: FinderStyle,
+        size: Float,
+        color: Int
+    ) {
+        val cs = moduleSize
+        val ox = offsetX + x * cs
+        val oy = offsetY + y * cs
+        val cx = ox + cs * 0.5f
+        val cy = oy + cs * 0.5f
+
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            this.style = Paint.Style.FILL
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            this.style = Paint.Style.STROKE
+            this.strokeWidth = 1f * size * cs
+        }
+
+        when (style) {
+            FinderStyle.CLASSIC -> { // rectangle
+                val left = ox - cs
+                val top = oy - cs
+                canvas.drawRect(left, top, left + 3 * cs, top + 3 * cs, fillPaint)
+                canvas.drawRect(ox - 2.5f * cs, oy - 2.5f * cs, ox + 3.5f * cs, oy + 3.5f * cs, strokePaint)
+            }
+            FinderStyle.CIRCLE -> { // round
+                canvas.drawCircle(cx, cy, 1.5f * cs, fillPaint)
+                canvas.drawCircle(cx, cy, 3.0f * cs, strokePaint)
+            }
+            FinderStyle.ROUNDED -> { // roundedRectangle
+                canvas.drawCircle(cx, cy, 1.5f * cs, fillPaint)
+                val path = com.veilframe.app.qr.model.QrVisualGeometry.createSquirclePath(
+                    android.graphics.RectF(ox - 2.5f * cs, oy - 2.5f * cs, ox + 3.5f * cs, oy + 3.5f * cs)
+                )
+                canvas.drawPath(path, strokePaint)
+            }
+            FinderStyle.PLANETS -> { // planets
+                canvas.drawCircle(cx, cy, 1.5f * cs, fillPaint)
+                val dashedPaint = Paint(strokePaint).apply {
+                    strokeWidth = 0.15f * cs
+                    pathEffect = DashPathEffect(floatArrayOf(0.5f * cs, 0.5f * cs), 0f)
+                }
+                canvas.drawCircle(cx, cy, 3.0f * cs, dashedPaint)
+                val satR = 0.5f * size * cs
+                canvas.drawCircle(cx + 3f * cs, cy, satR, fillPaint)
+                canvas.drawCircle(cx - 3f * cs, cy, satR, fillPaint)
+                canvas.drawCircle(cx, cy + 3f * cs, satR, fillPaint)
+                canvas.drawCircle(cx, cy - 3f * cs, satR, fillPaint)
+            }
+            FinderStyle.DSJ -> { // dsj
+                val widthValue = (3.0f - (1.0f - size)) * cs
+                val xTempValue = ox + (1.0f - size) / 2.0f * cs
+                val yTempValue = oy + (1.0f - size) / 2.0f * cs
+
+                // Center
+                canvas.drawRect(xTempValue - cs, yTempValue - cs, xTempValue - cs + widthValue, yTempValue - cs + widthValue, fillPaint)
+                // Left
+                canvas.drawRect(xTempValue - 3f * cs, yTempValue - cs, xTempValue - 3f * cs + size * cs, yTempValue - cs + widthValue, fillPaint)
+                // Right
+                canvas.drawRect(xTempValue + 3f * cs, yTempValue - cs, xTempValue + 3f * cs + size * cs, yTempValue - cs + widthValue, fillPaint)
+                // Top
+                canvas.drawRect(xTempValue - cs, yTempValue - 3f * cs, xTempValue - cs + widthValue, yTempValue - 3f * cs + size * cs, fillPaint)
+                // Bottom
+                canvas.drawRect(xTempValue - cs, yTempValue + 3f * cs, xTempValue - cs + widthValue, yTempValue + 3f * cs + size * cs, fillPaint)
+            }
+            else -> {
+                val left = ox - cs
+                val top = oy - cs
+                canvas.drawRect(left, top, left + 3 * cs, top + 3 * cs, fillPaint)
+                canvas.drawRect(ox - 2.5f * cs, oy - 2.5f * cs, ox + 3.5f * cs, oy + 3.5f * cs, strokePaint)
+            }
+        }
+    }
+
+    private fun formatCoord(v: Double): String {
+        return if (v % 1.0 == 0.0) {
+            v.toLong().toString()
+        } else {
+            String.format(Locale.US, "%.4f", v).trimEnd('0').trimEnd('.')
+        }
+    }
+
+    fun buildSvgElements(
+        x: Int,
+        y: Int,
+        qz: Double,
+        style: FinderStyle,
+        size: Float,
+        colorHex: String,
+        alpha: Float,
+        idStart: Int,
+        qzLeft: Double = qz,
+        qzTop: Double = qz
+    ): Pair<String, Int> {
+        val sb = StringBuilder()
+        var id = idStart
+        val ax = x + qzLeft
+        val ay = y + qzTop
+        val alphaStr = String.format(Locale.US, "%.2f", alpha)
+        val posSizeStr = String.format(Locale.US, "%.3f", size)
+        val axMinus1 = formatCoord(ax - 1.0)
+        val ayMinus1 = formatCoord(ay - 1.0)
+        val axMinus25 = formatCoord(ax - 2.5)
+        val ayMinus25 = formatCoord(ay - 2.5)
+        val cx = formatCoord(ax + 0.5)
+        val cy = formatCoord(ay + 0.5)
+
+        when (style) {
+            FinderStyle.CLASSIC -> { // rectangle
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="3" height="3" fill="$colorHex" x="$axMinus1" y="$ayMinus1"/>""").append("\n")
+                id++
+                sb.append("""  <rect key="$id" opacity="$alphaStr" fill="none" stroke-width="$posSizeStr" stroke="$colorHex" x="$axMinus25" y="$ayMinus25" width="6" height="6"/>""").append("\n")
+                id++
+            }
+            FinderStyle.CIRCLE -> { // round
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cx" cy="$cy" r="1.5"/>""").append("\n")
+                id++
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="none" stroke-width="$posSizeStr" stroke="$colorHex" cx="$cx" cy="$cy" r="3"/>""").append("\n")
+                id++
+            }
+            FinderStyle.ROUNDED -> { // roundedRectangle
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cx" cy="$cy" r="1.5"/>""").append("\n")
+                id++
+                val sw = String.format(Locale.US, "%.3f", 100.0 / 6.0 * size)
+                sb.append("""  <path key="$id" opacity="$alphaStr" d="$SQ25_PATH" stroke="$colorHex" stroke-width="$sw" fill="none" transform="translate($axMinus25,$ayMinus25) scale(0.06,0.06)"/>""").append("\n")
+                id++
+            }
+            FinderStyle.PLANETS -> { // planets
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cx" cy="$cy" r="1.5"/>""").append("\n")
+                id++
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="none" stroke-width="0.15" stroke-dasharray="0.5,0.5" stroke="$colorHex" cx="$cx" cy="$cy" r="3"/>""").append("\n")
+                id++
+                val satR = String.format(Locale.US, "%.3f", 0.5 * size)
+                val cxPlus3 = formatCoord(ax + 3.5)
+                val cxMinus3 = formatCoord(ax - 2.5)
+                val cyPlus3 = formatCoord(ay + 3.5)
+                val cyMinus3 = formatCoord(ay - 2.5)
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cxPlus3" cy="$cy" r="$satR"/>""").append("\n")
+                id++
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cxMinus3" cy="$cy" r="$satR"/>""").append("\n")
+                id++
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cx" cy="$cyPlus3" r="$satR"/>""").append("\n")
+                id++
+                sb.append("""  <circle key="$id" opacity="$alphaStr" fill="$colorHex" cx="$cx" cy="$cyMinus3" r="$satR"/>""").append("\n")
+                id++
+            }
+            FinderStyle.DSJ -> { // dsj
+                val widthVal = 3.0f - (1.0f - size)
+                val widthValStr = String.format(Locale.US, "%.3f", widthVal)
+                val xTemp = ax + (1.0 - size.toDouble()) / 2.0
+                val yTemp = ay + (1.0 - size.toDouble()) / 2.0
+                val xtStr = String.format(Locale.US, "%.3f", xTemp - 1)
+                val ytStr = String.format(Locale.US, "%.3f", yTemp - 1)
+
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="$widthValStr" height="$widthValStr" fill="$colorHex" x="$xtStr" y="$ytStr"/>""").append("\n")
+                id++
+                val xLStr = String.format(Locale.US, "%.3f", xTemp - 3)
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="$posSizeStr" height="$widthValStr" fill="$colorHex" x="$xLStr" y="$ytStr"/>""").append("\n")
+                id++
+                val xRStr = String.format(Locale.US, "%.3f", xTemp + 3)
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="$posSizeStr" height="$widthValStr" fill="$colorHex" x="$xRStr" y="$ytStr"/>""").append("\n")
+                id++
+                val yTStr = String.format(Locale.US, "%.3f", yTemp - 3)
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="$widthValStr" height="$posSizeStr" fill="$colorHex" x="$xtStr" y="$yTStr"/>""").append("\n")
+                id++
+                val yBStr = String.format(Locale.US, "%.3f", yTemp + 3)
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="$widthValStr" height="$posSizeStr" fill="$colorHex" x="$xtStr" y="$yBStr"/>""").append("\n")
+                id++
+            }
+            else -> {
+                sb.append("""  <rect key="$id" opacity="$alphaStr" width="3" height="3" fill="$colorHex" x="$axMinus1" y="$ayMinus1"/>""").append("\n")
+                id++
+                sb.append("""  <rect key="$id" opacity="$alphaStr" fill="none" stroke-width="$posSizeStr" stroke="$colorHex" x="$axMinus25" y="$ayMinus25" width="6" height="6"/>""").append("\n")
+                id++
+            }
+        }
+        return Pair(sb.toString(), id)
+    }
+
+    fun buildSvgElements(
+        x: Int,
+        y: Int,
+        qz: Int,
+        style: FinderStyle,
+        size: Float,
+        colorHex: String,
+        alpha: Float,
+        idStart: Int,
+        qzLeft: Int = qz,
+        qzTop: Int = qz
+    ): Pair<String, Int> = buildSvgElements(
+        x = x,
+        y = y,
+        qz = qz.toDouble(),
+        style = style,
+        size = size,
+        colorHex = colorHex,
+        alpha = alpha,
+        idStart = idStart,
+        qzLeft = qzLeft.toDouble(),
+        qzTop = qzTop.toDouble()
+    )
+}

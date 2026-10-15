@@ -1,0 +1,211 @@
+package com.veilframe.app.qr
+
+import android.graphics.Bitmap
+import android.graphics.Color
+
+/**
+ * Visual style enum corresponding to the 12 VeilFrame Art Engine rendering modes.
+ *
+ * Architecture Taxonomy (Audit Section 4 & 18 - P3.3):
+ *
+ * 1. Canonical EFQRCode 7.0.3 Behavioral Parity Styles (10 styles):
+ *    - [BASIC]: Classic square/geometric modules with finder & per-zone shape overrides
+ *    - [BUBBLE]: Multi-scale cluster bubbles (3x3, 2x2, 1x2, 1x1) with upstream palette
+ *    - [D25]: 2.5D isometric projection (three-face extruded cubes)
+ *    - [DSJ]: DJ-cross finders, diagonal X crosses, and directional lines
+ *    - [IMAGE_FILL]: Background image baked into stencil-masked module colors
+ *    - [IMAGE]: Dual-pass background image overlay composited with foreground QR
+ *    - [IMAGE_RESAMPLE]: 3x3 subpixel resample with luminance thresholding & stochastic sampling
+ *    - [LINE]: Horizontal, vertical, diagonal X, and cross directional line patterns
+ *    - [RANDOM_RECTANGLE]: Randomized dual-rectangle modules with noise & shadow layers
+ *    - [FUNCTION]: Cosine radial fade gradient & concentric circular band functions
+ *
+ * 2. Intentional VeilFrame Architectural Extensions (2 styles):
+ *    - [STYLE_FUNCTION]: Advanced parameter-driven mathematical function override
+ *    - [CONNECTED_ORGANIC]: Graph-connected organic bezier module paths and bridges
+ */
+enum class QrStyle {
+    // --- Canonical EFQRCode 7.0.3 Parity Styles ---
+    BASIC,              // Classic square modules with per-zone shape overrides
+    BUBBLE,             // Organic bubble-cluster modules
+    D25,                // 2.5D isometric projection (three-face cubes)
+    DSJ,                // DJ-inspired radial/cross position patterns
+    IMAGE_FILL,         // Background image baked into module color
+    IMAGE,              // Full background image overlay composited with modules
+    IMAGE_RESAMPLE,     // Pixelated image resample into QR matrix
+    LINE,               // Horizontal/vertical stripe patterns
+    RANDOM_RECTANGLE,   // Randomized rectangle modules with noise
+    FUNCTION,           // Function-based custom module shapes
+
+    // --- VeilFrame-Only Extension Styles ---
+    STYLE_FUNCTION,     // Style-level function override (VeilFrame extension)
+    CONNECTED_ORGANIC;  // Organic graph-connected module paths (VeilFrame extension)
+
+    /** True if this style mirrors an official upstream EFQRCode 7.0.3 style. */
+    val isEfParityStyle: Boolean get() = this != STYLE_FUNCTION && this != CONNECTED_ORGANIC
+
+    /** True if this style is an intentional VeilFrame-specific artistic extension. */
+    val isVeilFrameExtension: Boolean get() = this == STYLE_FUNCTION || this == CONNECTED_ORGANIC
+}
+
+/** Shape options for individual module zones (position patterns, data modules, etc.). */
+enum class ModuleShape {
+    RECTANGLE,
+    ROUND,
+    RANDOM_ROUND,
+    ROUNDED_RECTANGLE,
+    PLANETS,
+    DSJ
+}
+
+/**
+ * Unified parameter bundle for QR code generation.
+ *
+ * Designed to mirror VeilFrame Art Engine's style parameter hierarchy while being
+ * idiomatic Kotlin/Android. Renderers read only the fields relevant to
+ * their style; unused fields are safely ignored.
+ */
+data class QrStyleParams(
+    /** Target output bitmap size in pixels. */
+    val outputSize: Int = 512,
+    /** QR module foreground color (dark modules). */
+    val foreground: Int = Color.BLACK,
+    /** Background color (light modules / canvas). */
+    val background: Int = Color.WHITE,
+    /** Style to render. */
+    val style: QrStyle = QrStyle.BASIC,
+    /** Data module shape (used by BASIC style). */
+    val dataShape: ModuleShape = ModuleShape.RECTANGLE,
+    /** Data module scale relative to one cell (0.0–1.0). Default is 1.0 for full cell coverage. */
+    val dataScale: Float = 1.0f,
+    /** Position-detection pattern shape. */
+    val positionShape: ModuleShape = ModuleShape.RECTANGLE,
+    /** Position pattern fill color (defaults to foreground). */
+    val positionColor: Int? = null,
+    /** Alignment pattern shape. */
+    val alignShape: ModuleShape = ModuleShape.RECTANGLE,
+    /** Timing pattern shape. */
+    val timingShape: ModuleShape = ModuleShape.RECTANGLE,
+    /** Optional logo/icon centered over the QR code. */
+    val logo: Bitmap? = null,
+    /** Logo size as fraction of output size (0.0–0.33). Default is 0.20 for EF parity. */
+    val logoFraction: Float = 0.20f,
+    /** Optional logo border color. */
+    val logoBorderColor: Int? = null,
+    /** Optional logo border width in pixels. */
+    val logoBorderWidth: Float = 0f,
+    /** Optional logo shape (SQUIRCLE, CIRCLE, SQUARE). */
+    val logoShape: com.veilframe.app.qr.model.LogoShape = com.veilframe.app.qr.model.LogoShape.SQUIRCLE,
+    /** Logo transparency / opacity (0.0–1.0). Default is 1.0. */
+    val logoAlpha: Float = 1.0f,
+    /** Logo image scale mode (defaults to ASPECT_FILL for EF parity). */
+    val logoScaleMode: com.veilframe.app.qr.model.ImageScaleMode = com.veilframe.app.qr.model.ImageScaleMode.ASPECT_FILL,
+    /** Optional background image (used by IMAGE* and IMAGE_FILL styles). */
+    /** Optional background image (used by backdrop and legacy styles). */
+    val backgroundImage: Bitmap? = null,
+    /** Blend alpha for background image overlay (0.0–1.0). */
+    val backgroundImageAlpha: Float = 0.85f,
+    /** Source image specifically for IMAGE, IMAGE_FILL, and IMAGE_RESAMPLE styles (distinct from backdrop). */
+    val sourceImage: Bitmap? = null,
+    /** Alpha for the style source image (0.0–1.0). */
+    val sourceImageAlpha: Float = 1.0f,
+    /** Scaling mode for source image in IMAGE and IMAGE_FILL styles (scaleAspectFill, scaleAspectFit, scaleToFill/STRETCH). */
+    val imageScaleMode: com.veilframe.app.qr.model.ImageScaleMode = com.veilframe.app.qr.model.ImageScaleMode.ASPECT_FILL,
+    // --- 2.5D specific (VeilFrameStyle25D) ---
+    val d25TopColor: Int = Color.BLACK,
+    val d25LeftColor: Int = 0x33000000,
+    val d25RightColor: Int = 0x99000000.toInt(),
+    val d25DataHeight: Float = 1.0f,
+    val d25PositionHeight: Float = 1.0f,
+    // --- IMAGE style specific (VeilFrameStyleImage) ---
+    val imageAllowTransparent: Boolean = false,
+    val imageColorStrategy: com.veilframe.app.qr.model.ImageColorStrategy = com.veilframe.app.qr.model.ImageColorStrategy.FIXED,
+    val imageDataScale: Float = 1.0f,
+    val imageDataDarkColor: Int = Color.BLACK,
+    val imageDataLightColor: Int = Color.WHITE,
+    val imagePositionDarkColor: Int = Color.BLACK,
+    val imagePositionLightColor: Int = Color.WHITE,
+    val imagePositionSize: Float = 1.0f,
+    val imageTimingDarkColor: Int = Color.BLACK,
+    val imageTimingLightColor: Int = Color.WHITE,
+    val imageTimingSize: Float = 1.0f,
+    val imageAlignDarkColor: Int = Color.BLACK,
+    val imageAlignLightColor: Int = Color.WHITE,
+    val imageAlignSize: Float = 1.0f,
+    // --- IMAGE_FILL style specific (VeilFrameStyleImageFill) ---
+    val imageFillBackgroundColor: Int = Color.WHITE,
+    val imageFillMaskColor: Int = 0x1A000000, // 10% black
+    // --- Bubble specific ---
+    val bubbleOutlineColor: Int = 0xFF8ED1FC.toInt(),
+    val bubbleCenterColor: Int = Color.WHITE,
+    val bubblePositionColor: Int = 0xFF0693E3.toInt(),
+    // --- DSJ specific (VeilFrameStyleDSJ) ---
+    val dsjLineSize: Float = 0.7f,
+    val dsjXSize: Float = 0.7f,
+    val dsjHorizontalLineColor: Int = 0xFFF6B506.toInt(),
+    val dsjVerticalLineColor: Int = 0xFFE02020.toInt(),
+    val dsjXColor: Int = 0xFF0B2D97.toInt(),
+    // --- Function specific (VeilFrameStyleFunction) ---
+    val functionType: com.veilframe.app.qr.model.VeilFunctionType = com.veilframe.app.qr.model.VeilFunctionType.FADE,
+    val functionDataStyle: com.veilframe.app.qr.model.VeilFunctionDataStyle = com.veilframe.app.qr.model.VeilFunctionDataStyle.ROUND,
+    val functionDataColor: Int = Color.BLACK,
+    val functionCircleColor: Int = Color.BLACK,
+    // --- Line specific (VeilFrameStyleLine) ---
+    val lineDirection: com.veilframe.app.qr.model.LineDirection = com.veilframe.app.qr.model.LineDirection.X,
+    val lineThickness: Float = 0.5f,
+    val lineColor: Int? = null,
+    val lineVerticalColor: Int? = null,   // legacy null → use foreground
+    val lineHorizontalColor: Int? = null,
+    val lineAccentRingsEnabled: Boolean = false,
+    val lineCircuitBridgesEnabled: Boolean = false,
+    val lineVariant: com.veilframe.app.qr.model.LineVariant = com.veilframe.app.qr.model.LineVariant.EF,
+    val lineRandomSource: (() -> Float)? = null,
+    // --- Random Rectangle specific (VeilFrameStyleRandomRectangle) ---
+    val randomRectColor: Int? = null,
+    val randomRectSeed: Long = 42L,
+    // --- Quiet Zone (null defaults to 1 for EF parity, 4 for SAFE mode) ---
+    val quietZone: Int? = null,
+    val quietZoneLeft: Int? = null,
+    val quietZoneTop: Int? = null,
+    val quietZoneRight: Int? = null,
+    val quietZoneBottom: Int? = null,
+    // --- Gradient (optional, applied over rendered bitmap) ---
+    val gradientStart: Int? = null,
+    val gradientEnd: Int? = null,
+    // --- Resample specific (VeilFrameStyleResampleImage) ---
+    val resampleUseSourceAsBackdrop: Boolean = false,
+    val resampleBackdropImage: Bitmap? = null,
+    val resampleBackdropOpacity: Float = 1.0f,
+    val resampleBackdropScaleMode: com.veilframe.app.qr.model.ImageScaleMode = com.veilframe.app.qr.model.ImageScaleMode.ASPECT_FILL,
+    val resampleSeed: Long = 42L,
+    val resampleBackdropTint: Int? = null,
+    val resampleRngMode: com.veilframe.app.qr.renderer.ResampleRngMode = com.veilframe.app.qr.renderer.ResampleRngMode.SYSTEM_UNSEEDED,
+    // --- Timing and Alignment onlyWhite controls (EFQRCode parity) ---
+    val timingOnlyWhite: Boolean = false,
+    val alignOnlyWhite: Boolean = false,
+    // --- Multi-frame animated source image (EFQRCode parity) ---
+    val sourceImageAnimatedFrames: List<Bitmap>? = null,
+    val sourceImageFrameDelaysMs: List<Int>? = null,
+    // --- Multi-frame animated icon / logo (EFQRCode parity) ---
+    val logoAnimatedFrames: List<Bitmap>? = null,
+    val logoFrameDelaysMs: List<Int>? = null,
+    // --- Per-zone colors ---
+    val timingColor: Int? = null,
+    val alignmentColor: Int? = null,
+    // --- EFQRCode Resample Image parameters ---
+    val contrast: Float = 0.0f,
+    val exposure: Float = 0.0f,
+    val sourceImageContrast: Float? = null,
+    val sourceImageExposure: Float? = null,
+    val resampleBackdropCornerRadius: Float = 0.0f,
+    val dataColor: Int? = null,
+    val timingSize: Float? = null,
+    val alignSize: Float? = null,
+    // --- Unified Backdrop (EFStyleParamBackdrop parity) ---
+    val backdropColor: Int? = null,
+    val backdropCornerRadius: Float? = null,
+    val backdropImage: Bitmap? = null,
+    val backdropImageAlpha: Float? = null,
+    val backdropImageScaleMode: com.veilframe.app.qr.model.ImageScaleMode? = null,
+    val backdropQuietZoneFractional: com.veilframe.app.qr.model.FractionalInsets? = null
+)

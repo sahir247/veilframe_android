@@ -1,0 +1,3930 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:viewBindingIgnore="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 1. PREVIEW -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/qr_preview_card"
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="3dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/qr_preview_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:padding="12dp"
+                    android:contentDescription="QR Code Preview" />
+
+                <LinearLayout
+                    android:id="@+id/qr_preview_empty_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="24dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_tool_qr"
+                        app:tint="?attr/colorOutline"
+                        android:alpha="0.45"
+                        android:contentDescription="Empty QR" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Enter content\nto generate QR"
+                        android:gravity="center"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOutline" />
+                </LinearLayout>
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/qr_preview_progress"
+                    style="@style/Widget.VeilFrame.Progress.Circular.Wavy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+
+                <!-- Animated GIF / Media Preview Badge -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/qr_preview_animation_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|start"
+                    android:layout_margin="12dp"
+                    android:visibility="gone"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="2dp"
+                    app:cardBackgroundColor="?attr/colorPrimaryContainer"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="4dp">
+
+                        <View
+                            android:layout_width="6dp"
+                            android:layout_height="6dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_pill_accent" />
+
+                        <TextView
+                            android:id="@+id/qr_preview_animation_badge_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ANIMATED PREVIEW"
+                            android:textStyle="bold"
+                            android:textSize="11sp"
+                            android:textColor="?attr/colorOnPrimaryContainer" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </FrameLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 2. SCANABILITY -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/qr_scanability_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:id="@+id/qr_scanability_icon"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginEnd="10dp"
+                        android:src="@drawable/ic_info_outline"
+                        app:tint="?attr/colorOutline"
+                        android:contentDescription="Verification Status" />
+
+                    <TextView
+                        android:id="@+id/qr_scanability_status"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="?attr/colorOutline"
+                        android:text="Validating..." />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_scanability_details_toggle"
+                        style="@style/Widget.VeilFrame.Button.Quiet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="6dp"
+                        android:text="Details" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/qr_scanability_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:text="Running on-device barcode validator..." />
+
+                <!-- Collapsible Technical Diagnostic Section -->
+                <LinearLayout
+                    android:id="@+id/container_scanability_tech_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?attr/colorSurfaceVariant"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/qr_scanability_tech_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:textSize="11sp"
+                        android:textColor="?attr/colorOutline"
+                        android:text="On-device barcode validator ready" />
+                </LinearLayout>
+
+                <!-- Actions: Auto-Repair and Test with Camera -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_auto_repair_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:visibility="gone"
+                        app:icon="@drawable/ic_reset"
+                        android:text="Auto-Repair Design" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_test_with_camera_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        app:icon="@drawable/ic_camera"
+                        android:text="Test with Camera" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 3. CONTENT -->
+        <!-- Guided Presets Selector Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Preset Type"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Horizontal Scrollable Guided Preset Chips -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="12dp">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/qr_preset_chip_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_text"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="URL / Text" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_wifi"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Wi-Fi" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_vcard"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Contact" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_email"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Email" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_sms"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SMS" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_preset_upi"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="UPI Pay" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
+        <!-- 1. URL / Plain Text Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Content (e.g. https://example.com, text)"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:endIconMode="clear_text">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_content_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionDone"
+                    android:inputType="textUri|textMultiLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <!-- 2. Wi-Fi Guided Preset Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_wifi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Network Name (SSID)"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:endIconMode="clear_text">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_wifi_ssid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Password"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:passwordToggleEnabled="true">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_wifi_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Security Type"
+                        android:textAppearance="?attr/textAppearanceLabelSmall"
+                        android:layout_marginBottom="4dp" />
+
+                    <Spinner
+                        android:id="@+id/qr_wifi_security_spinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/spinner_border_bg"
+                        android:padding="8dp" />
+                </LinearLayout>
+
+                <CheckBox
+                    android:id="@+id/qr_wifi_hidden_check"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Hidden" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 3. Contact Card (vCard) Guided Preset Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_vcard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:hint="First Name"
+                    app:boxCornerRadiusTopStart="14dp"
+                    app:boxCornerRadiusTopEnd="14dp"
+                    app:boxCornerRadiusBottomStart="14dp"
+                    app:boxCornerRadiusBottomEnd="14dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/qr_vcard_first_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:hint="Last Name"
+                    app:boxCornerRadiusTopStart="14dp"
+                    app:boxCornerRadiusTopEnd="14dp"
+                    app:boxCornerRadiusBottomStart="14dp"
+                    app:boxCornerRadiusBottomEnd="14dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/qr_vcard_last_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Phone Number"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_vcard_phone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="phone" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Email Address"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_vcard_email"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textEmailAddress" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Organization / Company"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_vcard_org"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Website / URL"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_vcard_url"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <!-- 4. Email Guided Preset Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_email"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Recipient Email"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_email_recipient"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textEmailAddress" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Subject"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_email_subject"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Message Body"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_email_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <!-- 5. SMS Guided Preset Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_sms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:hint="Phone Number"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_sms_phone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="phone" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Message"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusBottomEnd="14dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_sms_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <!-- 6. UPI Guided Preset Container -->
+        <LinearLayout
+            android:id="@+id/container_preset_upi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- UPI ID Field (Clean, non-confusing user input) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_upi_vpa"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:hint="UPI ID"
+                app:placeholderText="name@upi"
+                app:helperText="Enter your UPI ID, e.g. name@upi"
+                app:helperTextEnabled="true"
+                app:endIconMode="clear_text"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusBottomEnd="16dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/qr_upi_vpa"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionNext"
+                    android:inputType="textEmailAddress" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:hint="Payee (Optional)"
+                    app:boxCornerRadiusTopStart="14dp"
+                    app:boxCornerRadiusTopEnd="14dp"
+                    app:boxCornerRadiusBottomStart="14dp"
+                    app:boxCornerRadiusBottomEnd="14dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/qr_upi_payee_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:hint="Note (Optional)"
+                    app:boxCornerRadiusTopStart="14dp"
+                    app:boxCornerRadiusTopEnd="14dp"
+                    app:boxCornerRadiusBottomStart="14dp"
+                    app:boxCornerRadiusBottomEnd="14dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/qr_upi_note"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <!-- Amount Section Card (Optional) -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="?attr/colorSurfaceVariant"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Amount"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:id="@+id/qr_upi_amount_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Optional"
+                            android:textAppearance="?attr/textAppearanceLabelSmall"
+                            android:textColor="?attr/colorOutline" />
+                    </LinearLayout>
+
+                    <!-- Open text field for amount (Clean, no text overlap) -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_upi_amount"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Amount in ₹ (Optional)"
+                        app:prefixText="₹ "
+                        app:placeholderText="500"
+                        app:helperText="Maximum ₹1,00,000"
+                        app:helperTextEnabled="true"
+                        app:errorEnabled="true"
+                        app:endIconMode="clear_text"
+                        app:boxCornerRadiusTopStart="14dp"
+                        app:boxCornerRadiusTopEnd="14dp"
+                        app:boxCornerRadiusBottomStart="14dp"
+                        app:boxCornerRadiusBottomEnd="14dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/qr_upi_amount"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="numberDecimal" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Slider for amount -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/qr_upi_slider_label"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Amount Slider"
+                            android:textAppearance="?attr/textAppearanceLabelMedium" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_upi_clear_amount_btn"
+                            style="@style/Widget.VeilFrame.Button.Quiet"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Clear Amount"
+                            android:paddingHorizontal="8dp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_upi_amount_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="100000.0"
+                        android:stepSize="1.0"
+                        android:value="0.0" />
+
+                    <!-- Quick amount selection chips -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Choose an amount"
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="6dp" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/qr_upi_quick_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_none"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="No amount" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_50"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹50" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_100"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹100" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_200"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹200" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_500"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹500" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_1000"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹1,000" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_2000"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹2,000" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_5000"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹5,000" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_10000"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹10,000" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_50000"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹50,000" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chip_upi_1lakh"
+                                style="@style/Widget.Material3.Chip.Suggestion"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="₹1,00,000" />
+                        </com.google.android.material.chip.ChipGroup>
+                    </HorizontalScrollView>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+
+        <!-- 4. VISUAL STYLE -->
+        <!-- Visual Style Header & Gallery -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Visual Style"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="8dp">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/qr_style_chip_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_basic"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    app:chipIcon="@drawable/ic_style_thumb_basic"
+                    app:chipIconSize="28dp"
+                    android:text="Basic" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_bubble"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_bubble"
+                    app:chipIconSize="28dp"
+                    android:text="Bubble" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_d25"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_d25"
+                    app:chipIconSize="28dp"
+                    android:text="2.5D Isometric" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_dsj"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_dsj"
+                    app:chipIconSize="28dp"
+                    android:text="DSJ Cross" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_line"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_line"
+                    app:chipIconSize="28dp"
+                    android:text="Line Stripes" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_random_rect"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_random_rect"
+                    app:chipIconSize="28dp"
+                    android:text="Random Rect" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_image"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_image"
+                    app:chipIconSize="28dp"
+                    android:text="Image Backdrop" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_image_fill"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_image_fill"
+                    app:chipIconSize="28dp"
+                    android:text="Image Fill" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_image_resample"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_image_resample"
+                    app:chipIconSize="28dp"
+                    android:text="Image Resample" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_func"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_func"
+                    app:chipIconSize="28dp"
+                    android:text="Function Wave" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_style_func"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_style_func"
+                    app:chipIconSize="28dp"
+                    android:text="Style Function" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_style_composite"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipIcon="@drawable/ic_style_thumb_composite"
+                    app:chipIconSize="28dp"
+                    android:text="Connected Organic" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
+
+
+        <!-- 5. QUICK CUSTOMIZE -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Quick Customize"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_quick_customize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Foreground & Background Colors -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_fg_color_btn"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                app:icon="@drawable/ic_color_filter"
+                android:text="Foreground" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_bg_color_btn"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                app:icon="@drawable/ic_color_filter"
+                android:text="Background" />
+        </LinearLayout>
+
+
+                <View android:layout_height="8dp" android:layout_width="match_parent" />
+
+                <!-- Error Correction Level -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Error Correction"
+                    android:textAppearance="?attr/textAppearanceLabelSmall"
+                    android:layout_marginBottom="4dp" />
+
+                <Spinner
+                    android:id="@+id/qr_ec_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <View android:layout_height="8dp" android:layout_width="match_parent" />
+
+                <!-- Media Assets Row -->
+        <!-- Assets & Media Header & Row -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Assets &amp; Media"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_logo_btn"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                app:icon="@drawable/ic_tool_qr"
+                android:text="Logo" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_source_image_btn"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                app:icon="@drawable/ic_tab_image"
+                android:text="Source Media" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_bg_image_btn"
+                style="@style/Widget.VeilFrame.Button.Utility"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                app:icon="@drawable/ic_tab_image"
+                android:text="Background" />
+        </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 6. ADVANCED QR SETTINGS (Progressive Disclosure) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_advanced_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:id="@+id/qr_header_advanced_settings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginEnd="10dp"
+                        android:src="@drawable/ic_settings"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Advanced Settings" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Advanced QR Settings"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Geometry, modules, timing, eyes, gradients &amp; deep tuning"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOutline" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/qr_icon_toggle_advanced"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_expand_more"
+                        app:tint="?attr/colorOutline"
+                        android:contentDescription="Expand Advanced Settings" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/container_advanced_settings_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginTop="12dp">
+
+                    <!-- Core Geometry & Matrix Customization Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_core_geometry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Core Matrix &amp; Geometry"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <!-- Data Module Shape & Scale -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Data Module Shape"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_data_shape_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_data_scale_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Data Module Scale: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_data_scale_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.1"
+                    android:valueTo="1.0"
+                    android:stepSize="0.05"
+                    android:value="1.0" />
+
+                <!-- Finder / Position Shape, Size & Colors -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Finder / Position Eyes Shape"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_finder_shape_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_position_size_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Finder / Position Size: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_position_size_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.5"
+                    android:valueTo="1.5"
+                    android:stepSize="0.05"
+                    android:value="1.0" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_finder_outer_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="Finder Outer" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_finder_inner_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="Finder Inner" />
+                </LinearLayout>
+
+                <!-- Timing Pattern Shape, Size, Color, OnlyWhite -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Timing Pattern (Grid Synchronization)"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_timing_shape_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_timing_size_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Timing Pattern Size: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_timing_size_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.2"
+                    android:valueTo="1.5"
+                    android:stepSize="0.05"
+                    android:value="1.0" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/qr_timing_color_btn"
+                    style="@style/Widget.VeilFrame.Button.Utility"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:minWidth="0dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:paddingHorizontal="4dp"
+                    android:text="Timing Color" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/qr_timing_only_white_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="White Background Only" />
+
+                <!-- Alignment Pattern Shape, Size, Color, OnlyWhite -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Alignment Pattern (Perspective Correction)"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_align_shape_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_align_size_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Alignment Pattern Size: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_align_size_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.2"
+                    android:valueTo="1.5"
+                    android:stepSize="0.05"
+                    android:value="1.0" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/qr_align_color_btn"
+                    style="@style/Widget.VeilFrame.Button.Utility"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:minWidth="0dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:paddingHorizontal="4dp"
+                    android:text="Align Color" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/qr_align_only_white_switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="White Background Only" />
+
+                <!-- Quiet Zone Slider -->
+                <TextView
+                    android:id="@+id/qr_quiet_zone_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Quiet Zone Margin: 4 modules"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_quiet_zone_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.0"
+                    android:valueTo="10.0"
+                    android:stepSize="1.0"
+                    android:value="4.0" />
+
+                <!-- Asymmetric Quiet Zone Switch & Edge Sliders (EF EdgeInsets) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Directional Margins (Top / Bottom / Left / Right)"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/qr_asymmetric_qz_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/container_asymmetric_qz"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/qr_qz_left_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Left Margin: 4.0 modules"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_qz_left_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="10.0"
+                        android:stepSize="0.5"
+                        android:value="4.0" />
+
+                    <TextView
+                        android:id="@+id/qr_qz_top_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Top Margin: 4.0 modules"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_qz_top_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="10.0"
+                        android:stepSize="0.5"
+                        android:value="4.0" />
+
+                    <TextView
+                        android:id="@+id/qr_qz_right_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Right Margin: 4.0 modules"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_qz_right_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="10.0"
+                        android:stepSize="0.5"
+                        android:value="4.0" />
+
+                    <TextView
+                        android:id="@+id/qr_qz_bottom_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Bottom Margin: 4.0 modules"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_qz_bottom_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="10.0"
+                        android:stepSize="0.5"
+                        android:value="4.0" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Gradient Effects Card -->
+        <!-- Gradient Effects Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_gradient_effects"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Gradient Effects"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Gradient Type"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_gradient_type_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_gradient_start_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="Start Color" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_gradient_end_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="End Color" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_gradient_clear_btn"
+                        style="@style/Widget.VeilFrame.Button.Quiet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="8dp"
+                        android:text="Clear" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Contextual Style Settings Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_style_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:id="@+id/qr_style_settings_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Style Options"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <!-- 2.5D Depth Setting -->
+                <LinearLayout
+                    android:id="@+id/container_style_d25"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/qr_d25_depth_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Body 3D Depth: 1.00x"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_d25_depth_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.2"
+                        android:valueTo="2.0"
+                        android:stepSize="0.1"
+                        android:value="1.0" />
+
+                    <TextView
+                        android:id="@+id/qr_d25_pos_depth_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Finder 3D Depth: 1.00x"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_d25_pos_depth_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.2"
+                        android:valueTo="2.0"
+                        android:stepSize="0.1"
+                        android:value="1.0" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="3D Face Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_d25_top_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Top Face" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_d25_left_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Left Face" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_d25_right_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Right Face" />
+                    </LinearLayout>
+
+                    <!-- VeilFrame Extension: Projection angle is NOT consumed by D25Geometry.
+                         EFQRCode uses a fixed isometric projection. This slider is retained as a
+                         planned VeilFrame extension but hidden until the renderer supports it. -->
+                    <TextView
+                        android:id="@+id/qr_d25_angle_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Projection Angle: 45° (Extension)"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_d25_angle_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="15.0"
+                        android:valueTo="75.0"
+                        android:stepSize="5.0"
+                        android:value="45.0"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- LINE Direction, Variant, and Thickness Setting -->
+                <LinearLayout
+                    android:id="@+id/container_style_line"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Stripe Direction"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/qr_line_direction_group"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_x"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            android:text="Horizontal" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_y"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Vertical" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_cross"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cross" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_loopback"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Loopback" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_tl_br"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="↘ Diagonal" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_tr_bl"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="↙ Diagonal" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_dir_x_pattern"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="X" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Line Pattern Topology"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/qr_line_variant_group"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_variant_standard"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            android:text="Standard" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_line_variant_circuit"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Circuit Bridge" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <TextView
+                        android:id="@+id/qr_line_thickness_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Line Thickness: 0.50"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_line_thickness_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.1"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.5" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Line Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_line_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Main Line" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_line_h_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="H-Color" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_line_v_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="V-Color" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Accent Rings"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_line_accent_rings_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="4dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Circuit Bridges"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_line_circuit_bridges_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- DSJ Line & X Cross Size Settings (Separated Independent Controls) -->
+                <LinearLayout
+                    android:id="@+id/container_style_dsj"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/qr_dsj_line_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Cross Arm Size: 0.70"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_dsj_line_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.3"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.7" />
+
+                    <TextView
+                        android:id="@+id/qr_dsj_x_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Center X Size: 0.70"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_dsj_x_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.3"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.7" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="DSJ Pattern Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_dsj_h_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="H-Bar" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_dsj_v_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="V-Bar" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_dsj_x_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Center X" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- RANDOM_RECTANGLE Pattern Seed & Jitter Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_random_rect"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/qr_random_jitter_scale_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Jitter Scale: 0.25"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_random_jitter_scale_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="0.5"
+                        android:stepSize="0.05"
+                        android:value="0.25" />
+
+                    <TextView
+                        android:id="@+id/qr_random_jitter_offset_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Jitter Offset: 0.00"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_random_jitter_offset_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="0.3"
+                        android:stepSize="0.05"
+                        android:value="0.0" />
+
+                    <TextView
+                        android:id="@+id/qr_random_jitter_color_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Color Jitter: 10%"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_random_jitter_color_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.1" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_random_rect_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Rect Color" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_random_rect_seed_btn"
+                            style="@style/Widget.VeilFrame.Button.Action"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            app:iconPadding="2dp"
+                            app:icon="@drawable/ic_reset"
+                            android:text="Randomize" />
+                    </LinearLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="Exact Seed Entry"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/qr_random_seed_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberSigned" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <!-- BUBBLE Cluster Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_bubble"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ambient Bubbles"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_bubble_ambient_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/qr_bubble_density_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Ambient Density: 15%"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_bubble_density_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.05"
+                        android:valueTo="0.40"
+                        android:stepSize="0.05"
+                        android:value="0.15" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Bubble Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_bubble_outline_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Outline" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_bubble_center_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Center" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_bubble_pos_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Finder" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- FUNCTION Parametric Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_function"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Function Pattern"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/qr_function_type_group"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_func_fade"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            android:text="Radial Fade" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_func_circle"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Concentric Band" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Data Module Shape"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/qr_function_data_style_group"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_func_data_round"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            android:text="Round" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_func_data_rect"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Rectangle" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Function Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_function_data_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Data Color" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_function_circle_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Ring Color" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- STYLE_FUNCTION Parametric Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_style_function"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Mathematical Function Type"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <Spinner
+                        android:id="@+id/qr_style_func_type_spinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/spinner_border_bg"
+                        android:padding="8dp" />
+
+                    <TextView
+                        android:id="@+id/qr_style_func_freq_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Frequency: 0.50"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_style_func_freq_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.1"
+                        android:valueTo="2.0"
+                        android:stepSize="0.05"
+                        android:value="0.5" />
+
+                    <TextView
+                        android:id="@+id/qr_style_func_amp_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Amplitude: 0.25"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_style_func_amp_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.05"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.25" />
+                </LinearLayout>
+
+                <!-- CONNECTED_ORGANIC Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_connected_organic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/qr_connected_thickness_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Connected Line Thickness: 0.20"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_connected_thickness_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.05"
+                        android:valueTo="1.0"
+                        android:stepSize="0.05"
+                        android:value="0.2" />
+                </LinearLayout>
+
+                <!-- IMAGE_FILL Settings -->
+                <LinearLayout
+                    android:id="@+id/container_style_image_fill"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Image Fill Composition Colors"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_fill_bg_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Fill BG Color" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_fill_mask_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Fill Mask Color" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- IMAGE Style Requirement Banner -->
+                <LinearLayout
+                    android:id="@+id/container_image_backdrop_required"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/rounded_banner_warning_bg"
+                    android:padding="10dp"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Source Photo Required"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="#D97706" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Image Backdrop renders data modules over a photo. Please select a source photo."
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_choose_bg_required_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        app:icon="@drawable/ic_tab_image"
+                        android:text="Choose Photo" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Dynamic Source Image Controls Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_source_image_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Source Image"
+                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_remove_source_img_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Remove"
+                        app:icon="@drawable/ic_close" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Scale Mode"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_source_scale_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_source_contrast_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Contrast: 0.00"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_source_contrast_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="-1.0"
+                    android:valueTo="1.0"
+                    android:stepSize="0.05"
+                    android:value="0.0" />
+
+                <TextView
+                    android:id="@+id/qr_source_exposure_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Exposure: 0.00"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_source_exposure_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="-1.0"
+                    android:valueTo="1.0"
+                    android:stepSize="0.05"
+                    android:value="0.0" />
+
+                <TextView
+                    android:id="@+id/qr_source_opacity_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Opacity: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_source_opacity_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="5"
+                    android:valueTo="100"
+                    android:stepSize="5"
+                    android:value="100" />
+
+                <!-- IMAGE Specific Options Container (EFQRCode parity) -->
+                <LinearLayout
+                    android:id="@+id/container_image_specific_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.divider.MaterialDivider
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Allow Transparent switch -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Allow Transparent"
+                                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Sample image through QR and expose matrix in transparent areas"
+                                android:textAppearance="?attr/textAppearanceLabelSmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_image_allow_transparent_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <!-- Data Module Scale Slider -->
+                    <TextView
+                        android:id="@+id/qr_image_data_scale_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Data Module Scale: 100%"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_image_data_scale_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="5"
+                        android:valueTo="100"
+                        android:stepSize="5"
+                        android:value="100" />
+
+                    <!-- Data Colors -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Data Colors (Dark / Light)"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_data_dark_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Data Dark" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_data_light_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Data Light" />
+                    </LinearLayout>
+
+                    <!-- Image Color Strategy -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Image Color Strategy"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_strategy_fixed_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="2dp"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Fixed" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_strategy_palette_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginHorizontal="2dp"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Palette" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_strategy_contrast_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="2dp"
+                            android:paddingHorizontal="2dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Contrast" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_image_data_transparent_light_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Make Light Modules Transparent" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_image_apply_sample_preset_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Apply Image Sample Preset (Cyan 35% + White)" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_image_apply_standard_ef_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Reset to EF Defaults (Black 100% + Opaque)" />
+
+                    <!-- Finder / Position Controls -->
+                    <TextView
+                        android:id="@+id/qr_image_pos_size_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Position / Finder Size: 1.00x"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_image_pos_size_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.5"
+                        android:valueTo="2.0"
+                        android:stepSize="0.05"
+                        android:value="1.0" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_pos_dark_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Finder Dark" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_pos_light_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Finder Light" />
+                    </LinearLayout>
+
+                    <!-- Timing Controls -->
+                    <TextView
+                        android:id="@+id/qr_image_timing_size_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Timing Pattern Size: 1.00x"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_image_timing_size_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.5"
+                        android:valueTo="2.0"
+                        android:stepSize="0.05"
+                        android:value="1.0" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_timing_dark_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Timing Dark" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_timing_light_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Timing Light" />
+                    </LinearLayout>
+
+                    <!-- Alignment Controls -->
+                    <TextView
+                        android:id="@+id/qr_image_align_size_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Alignment Pattern Size: 1.00x"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_image_align_size_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.5"
+                        android:valueTo="2.0"
+                        android:stepSize="0.05"
+                        android:value="1.0" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_align_dark_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Align Dark" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_image_align_light_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Align Light" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- RESAMPLE Specific Options Container -->
+                <LinearLayout
+                    android:id="@+id/container_resample_specific_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- Continuous Photo Backdrop (Artwork QR / VeilFrame Art style) -->
+                    <com.google.android.material.divider.MaterialDivider
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Use Photo as Backdrop"
+                                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Draw continuous image behind resample dots"
+                                android:textAppearance="?attr/textAppearanceLabelSmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_resample_backdrop_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/container_resample_backdrop_opacity"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/qr_resample_backdrop_opacity_label"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Backdrop Opacity: 100%"
+                            android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/qr_resample_backdrop_opacity_slider"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:valueFrom="0"
+                            android:valueTo="100"
+                            android:stepSize="5"
+                            android:value="100" />
+                    </LinearLayout>
+
+                    <!-- Advanced Resample Backdrop & RNG Parameters -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Separate Backdrop Image"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_resample_backdrop_img_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            app:icon="@drawable/ic_tab_image"
+                            android:text="Backdrop Image" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_resample_backdrop_img_remove_btn"
+                            style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:padding="0dp"
+                            android:contentDescription="Clear"
+                            app:icon="@drawable/ic_action_clear"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp"
+                            app:iconTint="@color/vf_text_secondary" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Backdrop Scale Mode"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                    <Spinner
+                        android:id="@+id/qr_resample_backdrop_scale_spinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/spinner_border_bg"
+                        android:padding="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_resample_data_color_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Data Color" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_resample_backdrop_tint_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:text="Backdrop Tint" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/qr_resample_backdrop_radius_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Backdrop Corner Radius: 0dp"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/qr_resample_backdrop_radius_slider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:valueFrom="0.0"
+                        android:valueTo="64.0"
+                        android:stepSize="4.0"
+                        android:value="0.0" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="4dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Deterministic Seed RNG"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/qr_resample_rng_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_resample_seed_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:text="Randomize Resample Seed"
+                        app:icon="@drawable/ic_reset" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Dynamic Background Image Controls Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_bg_image_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Background Image"
+                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_remove_bg_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Remove"
+                        app:icon="@drawable/ic_close" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/qr_bg_opacity_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Opacity: 25%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_bg_opacity_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="5"
+                    android:valueTo="100"
+                    android:stepSize="5"
+                    android:value="25" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Dynamic Backdrop & Frame Controls Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_backdrop_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Backdrop &amp; Frame"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_backdrop_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minWidth="0dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="Backdrop Color" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_backdrop_image_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minWidth="0dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        app:icon="@drawable/ic_tab_image"
+                        android:text="Frame Image" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_backdrop_image_remove_btn"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:contentDescription="Clear"
+                        app:icon="@drawable/ic_action_clear"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/vf_text_secondary" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/qr_backdrop_radius_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Frame Corner Radius: 0dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_backdrop_radius_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.0"
+                    android:valueTo="64.0"
+                    android:stepSize="4.0"
+                    android:value="0.0" />
+
+                <TextView
+                    android:id="@+id/qr_backdrop_image_alpha_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Backdrop Image Opacity: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_backdrop_image_alpha_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0"
+                    android:valueTo="100"
+                    android:stepSize="5"
+                    android:value="100" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Backdrop Scale Mode"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_backdrop_scale_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+                    <!-- Dynamic Logo Controls Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_logo_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Center Logo"
+                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_remove_logo_btn"
+                        style="@style/Widget.VeilFrame.Button.Action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="8dp"
+                        android:text="Remove"
+                        app:icon="@drawable/ic_close" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/qr_logo_size_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Size: 20%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_logo_size_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="10"
+                    android:valueTo="33"
+                    android:stepSize="1"
+                    android:value="20" />
+
+                <!-- Logo Shape -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Logo Clipping Shape"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_logo_shape_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <!-- Logo Opacity / Alpha -->
+                <TextView
+                    android:id="@+id/qr_logo_alpha_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Logo Opacity: 100%"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_logo_alpha_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="10"
+                    android:valueTo="100"
+                    android:stepSize="5"
+                    android:value="100" />
+
+                <!-- Logo Border Width & Color -->
+                <TextView
+                    android:id="@+id/qr_logo_border_width_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Border Width: 0dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/qr_logo_border_width_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:valueFrom="0.0"
+                    android:valueTo="32.0"
+                    android:stepSize="2.0"
+                    android:value="0.0" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_logo_border_color_btn"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        android:text="Border Color" />
+                </LinearLayout>
+
+                <!-- Logo Scale Mode -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Logo Scale Mode"
+                    android:textAppearance="?attr/textAppearanceLabelSmall" />
+
+                <Spinner
+                    android:id="@+id/qr_logo_scale_mode_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 7. ANIMATION -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Animation"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_animation_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Animation Status Banner -->
+                <TextView
+                    android:id="@+id/qr_animation_status_banner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="8dp"
+                    android:background="@drawable/bg_pill_accent"
+                    android:backgroundTint="?attr/colorSurfaceVariant"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:text="No animation loaded. Import a GIF, WebP, or video to preview and export animated QR codes." />
+
+                <!-- Animation Media Import Controls -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_btn_pick_animated_watermark"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minWidth="0dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        app:icon="@drawable/ic_tab_image"
+                        android:text="Source Media" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_btn_pick_animated_logo"
+                        style="@style/Widget.VeilFrame.Button.Utility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minWidth="0dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:paddingHorizontal="4dp"
+                        app:icon="@drawable/ic_tool_qr"
+                        android:text="Anim Logo" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/qr_btn_clear_animation"
+                        style="@style/Widget.VeilFrame.IconButton.Toolbar"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:padding="0dp"
+                        android:contentDescription="Clear"
+                        app:icon="@drawable/ic_action_clear"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/vf_text_secondary" />
+                </LinearLayout>
+
+                <View android:layout_height="8dp" android:layout_width="match_parent" />
+
+                <!-- Animated Media Export Section (GIF / Video MP4 / Animated SVG) -->
+        <!-- Animated Media Export Section (GIF / Video MP4 / Animated SVG) -->
+        <TextView
+            android:id="@+id/qr_animated_export_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:text="Generate looping animated media from current QR artwork"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:id="@+id/container_animated_export"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_save_gif_btn"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                android:text="GIF"
+                app:icon="@drawable/ic_action_save" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_save_video_btn"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                android:text="MP4"
+                app:icon="@drawable/ic_tab_video" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/qr_save_animated_svg_btn"
+                style="@style/Widget.VeilFrame.Button.Action"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingHorizontal="4dp"
+                app:iconPadding="4dp"
+                android:text="Anim SVG"
+                app:icon="@drawable/ic_action_save" />
+        </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 8. EXPORT -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Export"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:layout_marginBottom="6dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_export_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Export State & Guidance Banner -->
+        <!-- Export State & Guidance Banner -->
+        <TextView
+            android:id="@+id/qr_export_status_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:background="@drawable/bg_pill_accent"
+            android:backgroundTint="?attr/colorSurfaceVariant"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:text="Enter content to export QR code" />
+
+
+                <!-- Resolution Selection -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Resolution"
+                    android:textAppearance="?attr/textAppearanceLabelSmall"
+                    android:layout_marginBottom="4dp" />
+
+                <Spinner
+                    android:id="@+id/qr_resolution_spinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/spinner_border_bg"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/qr_resolution_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Preview optimized at ≤512px · Final export generates at selected size"
+                    android:textAppearance="?attr/textAppearanceLabelSmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <View android:layout_height="8dp" android:layout_width="match_parent" />
+
+                <!-- Save / Share Grid (2x2 Material 3 Expressive Action Grid) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_save_btn"
+                            style="@style/Widget.VeilFrame.Button.Primary"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:paddingHorizontal="4dp"
+                            app:iconPadding="2dp"
+                            android:text="PNG"
+                            app:icon="@drawable/ic_action_save" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_save_svg_btn"
+                            style="@style/Widget.VeilFrame.Button.Action"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:paddingHorizontal="4dp"
+                            app:iconPadding="2dp"
+                            android:text="SVG" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_save_jpeg_btn"
+                            style="@style/Widget.VeilFrame.Button.Action"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:paddingHorizontal="4dp"
+                            app:iconPadding="2dp"
+                            android:text="JPEG" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/qr_share_btn"
+                            style="@style/Widget.VeilFrame.Button.Utility"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="4dp"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:minWidth="0dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:paddingHorizontal="4dp"
+                            app:iconPadding="2dp"
+                            android:text="Share"
+                            app:icon="@drawable/ic_action_share" />
+                    </LinearLayout>
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

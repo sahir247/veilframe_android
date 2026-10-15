@@ -1,0 +1,140 @@
+package com.veilframe.app.qr.validation
+
+import android.graphics.Color
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.veilframe.app.qr.encoder.QrEncoder
+import com.veilframe.app.qr.model.ErrorCorrectionChoice
+import com.veilframe.app.qr.model.FinderStyle
+import com.veilframe.app.qr.model.ModuleShape
+import com.veilframe.app.qr.model.QrDesign
+
+data class AutoRepairResult(
+    val repairedDesign: QrDesign,
+    val changesApplied: List<String>
+)
+
+object AutoRepairEngine {
+
+    /**
+     * Iteratively repairs a [QrDesign] based on [ScanabilityReport] recommendations.
+     *
+     * Invariant: When elevating error correction, the QR content must be re-encoded
+     * through [QrEncoder] to produce an updated [QrMatrix] and recalculate all visual geometry.
+     */
+    fun repair(
+        currentDesign: QrDesign,
+        report: ScanabilityReport,
+        content: String
+    ): AutoRepairResult {
+        var design = currentDesign
+        val changes = mutableListOf<String>()
+
+        for (reason in report.repairSuggestions) {
+            when (reason) {
+                RepairReason.RESTORE_QUIET_ZONE -> {
+                    val currentMinMargin = minOf(
+                        report.quietZone.minMargin,
+                        design.quietZoneModules.toFloat(),
+                        design.explicitQuietZone?.toFloat() ?: Float.MAX_VALUE
+                    )
+                    if (currentMinMargin < 4f || design.directionalQuietZone != null || design.backdropStyle.fractionalQuietZone != null) {
+                        design = design.copy(
+                            quietZoneModules = 4,
+                            explicitQuietZone = 4,
+                            directionalQuietZone = null,
+                            backdropStyle = design.backdropStyle.copy(fractionalQuietZone = null)
+                        )
+                        changes.add("Restored 4-module quiet zone")
+                    }
+                }
+
+                RepairReason.RESTORE_FINDER_GEOMETRY -> {
+                    if (design.eyeStyle.style != FinderStyle.CLASSIC && design.eyeStyle.style != FinderStyle.ROUNDED) {
+                        design = design.copy(
+                            eyeStyle = design.eyeStyle.copy(style = FinderStyle.ROUNDED)
+                        )
+                        changes.add("Restored canonical high-contrast finder geometry")
+                    }
+                }
+
+                RepairReason.INCREASE_MODULE_SCALE -> {
+                    val newScale = (design.moduleStyle.scale + 0.1f).coerceAtMost(1.0f)
+                    if (newScale > design.moduleStyle.scale) {
+                        design = design.copy(
+                            moduleStyle = design.moduleStyle.copy(scale = newScale)
+                        )
+                        changes.add("Increased module fill scale to ${String.format("%.2f", newScale)}")
+                    }
+                }
+
+                RepairReason.REDUCE_LOGO_SIZE -> {
+                    val logo = design.logo
+                    if (logo != null && logo.scaleFraction > 0.15f) {
+                        val newFraction = (logo.scaleFraction - 0.05f).coerceAtLeast(0.12f)
+                        design = design.copy(
+                            logo = logo.copy(scaleFraction = newFraction)
+                        )
+                        changes.add("Reduced logo size to ${String.format("%.0f", newFraction * 100)}% to protect scanability")
+                    }
+                }
+
+                RepairReason.INCREASE_CONTRAST -> {
+                    if (design.style == com.veilframe.app.qr.QrStyle.IMAGE || design.style == com.veilframe.app.qr.QrStyle.IMAGE_FILL) {
+                        design = design.copy(
+                            dataColorDark = Color.BLACK,
+                            dataColorLight = Color.WHITE,
+                            allowTransparent = false,
+                            imageDataScale = maxOf(design.imageDataScale ?: design.moduleStyle.scale, 0.50f)
+                        )
+                        changes.add("Enforced high-contrast data mark colors and scale for image QR")
+                    } else {
+                        design = design.copy(
+                            palette = design.palette.copy(
+                                foreground = Color.BLACK,
+                                background = Color.WHITE,
+                                gradientStart = null,
+                                gradientEnd = null
+                            )
+                        )
+                        changes.add("Maximized luminance contrast (pure black/white palette)")
+                    }
+                }
+
+                RepairReason.REDUCE_DEFORMATION -> {
+                    if (design.moduleStyle.shape != ModuleShape.SQUARE && design.moduleStyle.shape != ModuleShape.ROUNDED) {
+                        design = design.copy(
+                            moduleStyle = design.moduleStyle.copy(shape = ModuleShape.ROUNDED, cornerRadiusFraction = 0.25f)
+                        )
+                        changes.add("Normalized module shape from aggressive styling to rounded modules")
+                    }
+                }
+
+                RepairReason.ELEVATE_ERROR_CORRECTION -> {
+                    // Only elevate if not already at maximum recovery level H (prevents H -> Q downgrade)
+                    if (report.errorCorrection != ErrorCorrectionLevel.H) {
+                        val nextLevel = when (report.errorCorrection) {
+                            ErrorCorrectionLevel.L -> ErrorCorrectionChoice.M
+                            ErrorCorrectionLevel.M -> ErrorCorrectionChoice.Q
+                            ErrorCorrectionLevel.Q,
+                            ErrorCorrectionLevel.H -> ErrorCorrectionChoice.H
+                        }
+
+                        if (nextLevel != design.correction) {
+                            design = design.copy(correction = nextLevel)
+                            changes.add("Elevated error correction level to $nextLevel")
+
+                            // Re-encode through the unified generator abstraction to validate new matrix sizing
+                            com.veilframe.app.qr.QrGenerator.generateMatrix(
+                                content = content,
+                                design = design,
+                                mode = design.recommendedGenerationMode
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return AutoRepairResult(design, changes)
+    }
+}

@@ -1,0 +1,700 @@
+package com.veilframe.app.qr.geometry
+
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.RectF
+import java.util.Locale
+import com.veilframe.app.qr.image.AdaptiveColorOptimizer
+import com.veilframe.app.qr.image.EfImagePreprocessor
+import com.veilframe.app.qr.image.FootprintSampler
+import com.veilframe.app.qr.image.ImageColorAnalyzer
+import com.veilframe.app.qr.image.JointColorOptimizationResult
+import com.veilframe.app.qr.image.SamplingObjective
+import com.veilframe.app.qr.image.SpatialModuleContext
+import com.veilframe.app.qr.model.*
+import com.veilframe.app.qr.renderer.VeilPositionPatternGeometry
+
+/**
+ * Builds a unified, authoritative [QrGeometryIr] representation for [com.veilframe.app.qr.QrStyle.IMAGE].
+ *
+ * Implements canonical EFQRCode 7.0.3 EFStyleImage layered rendering semantics:
+ * 1. Document Backdrop: Solid canvas fill and optional preprocessed backdrop image.
+ * 2. Optional Pre-Pass: Gated on (hasImage && allowTransparent) — renders underlying full-size 1x1
+ *    data modules (dark with dataColorDark, light with dataColorLight) before the watermark image.
+ * 3. Watermark Image & #hole Mask: Gated on (hasImage) — embedded scaled image with 8x8 finder
+ *    cutout regions (TL, TR, BL) removed via mask so image never enters finder zones.
+ * 4. Position Patterns: 8x8 solid backing rect with posLightColor, followed by outer ring and
+ *    inner core in posDarkColor, sequenced in EF column-major order (TL -> BL -> TR).
+ * 5. Timing Tracks: Dedicated dark and light module rendering with custom shapes/sizes.
+ * 6. Alignment Patterns: Dedicated dark and light module rendering with custom shapes/sizes.
+ * 7. Data Modules: Scaled data marks drawn on top of the image with their respective colors, shapes, and scale.
+ * 8. Center Logo: Rendered centered on top if present.
+ *
+ * Provides a single mathematical source of truth across Android Canvas rasterization and SVG vector emission.
+ */
+object ImageGeometryBuilder {
+
+    fun generateGeometry(
+        matrix: QrMatrix,
+        design: QrDesign,
+        geometry: QrGeometry
+    ): QrGeometryIr {
+        val n = matrix.size
+        val mSize = geometry.moduleSize
+        val x0 = geometry.offsetX
+        val y0 = geometry.offsetY
+        val width = geometry.outputWidthFloat
+        val height = geometry.outputHeightFloat
+
+        val sourceImage = design.imageSource.bitmap
+        val hasStaticImage = sourceImage != null && !sourceImage.isRecycled
+        val animatedFrames = design.imageSource.animatedFrames
+        val hasAnimatedFrames = !animatedFrames.isNullOrEmpty()
+        val hasImage = hasStaticImage || hasAnimatedFrames
+
+        val nodes = mutableListOf<QrGeometryNode>()
+        val defs = mutableListOf<String>()
+        val masks = mutableMapOf<String, QrMaskDefinition>()
+
+        // 1. Background Canvas & Backdrop (EF generic backdrop contract)
+        val resolvedBackdropColor = design.backdropStyle.color ?: design.palette.background
+        val bgAlpha = colorAlpha(resolvedBackdropColor)
+        if (bgAlpha > 0) {
+            val crPx = if (design.backdropStyle.cornerRadius > 0f) design.backdropStyle.cornerRadius * mSize else 0f
+            val bgAlphaFloat = ((resolvedBackdropColor ushr 24) and 0xFF) / 255f
+            nodes.add(
+                RectNode(
+                    x = 0f,
+                    y = 0f,
+                    width = width,
+                    height = height,
+                    rx = crPx,
+                    ry = crPx,
+                    fill = resolvedBackdropColor,
+                    opacity = bgAlphaFloat,
+                    alwaysEmitOpacity = true
+                )
+            )
+        }
+
+        val backdropImg = design.backdropStyle.image
+        val preprocessedBackdrop: Bitmap? = if (backdropImg != null && !backdropImg.isRecycled) {
+            EfImagePreprocessor.preprocess(
+                source = backdropImg,
+                canvasWidth = width,
+                canvasHeight = height,
+                mode = design.backdropStyle.imageScaleMode
+            )
+        } else null
+        if (preprocessedBackdrop != null) {
+            nodes.add(
+                ImageNode(
+                    x = 0f,
+                    y = 0f,
+                    width = width,
+                    height = height,
+                    bitmap = preprocessedBackdrop,
+                    opacity = design.backdropStyle.imageAlpha,
+                    preserveAspectRatio = "",
+                    key = "bi"
+                )
+            )
+        }
+
+        val dataShape = design.moduleStyle.shape
+        val dataScale = maxOf(0f, (design.imageDataScale ?: design.moduleStyle.scale))
+        val adaptiveColors = if (design.imageColorStrategy == ImageColorStrategy.ADAPTIVE_PALETTE || design.imageColorStrategy == ImageColorStrategy.ADAPTIVE_CONTRAST) {
+            if (animatedFrames != null && animatedFrames.isNotEmpty()) {
+                ImageColorAnalyzer.analyzeAnimated(animatedFrames)
+            } else if (sourceImage != null && !sourceImage.isRecycled) {
+                ImageColorAnalyzer.analyze(sourceImage)
+            } else null
+        } else null
+        val dataDarkColor = if (design.imageColorStrategy == ImageColorStrategy.ADAPTIVE_PALETTE) {
+            adaptiveColors?.darkColor ?: design.dataColorDark
+        } else {
+            design.dataColorDark
+        }
+        val dataLightColor = if (design.imageColorStrategy == ImageColorStrategy.ADAPTIVE_PALETTE) {
+            adaptiveColors?.lightColor ?: design.dataColorLight
+        } else {
+            design.dataColorLight
+        }
+        val allowTransparent = design.allowTransparent
+
+        val posStyle = design.eyeStyle.style
+        val posDarkColor = design.positionDarkColor
+        val posLightColor = design.positionLightColor
+        val posSize = design.positionSize
+
+        val timingShape = design.timingStyle.shape
+        val timingDarkColor = design.timingDarkColor
+        val timingLightColor = design.timingLightColor
+        val timingSize = design.timingSize
+
+        val alignShape = design.alignmentStyle.shape
+        val alignDarkColor = design.alignDarkColor
+        val alignLightColor = design.alignLightColor
+        val alignSize = design.alignSize
+
+        val imageAlpha = design.imageSource.opacity.coerceIn(0f, 1f)
+
+        // Pre-process watermark images if present
+        val canvasW = n * mSize
+        val canvasH = n * mSize
+
+        val preprocessedFrames: List<Bitmap>? = if (hasImage && animatedFrames != null && animatedFrames.isNotEmpty()) {
+            animatedFrames.map { frame ->
+                EfImagePreprocessor.preprocess(
+                    source = frame,
+                    canvasWidth = canvasW,
+                    canvasHeight = canvasH,
+                    mode = design.imageSource.scaleMode
+                )
+            }
+        } else null
+
+        val preprocessedImage: Bitmap? = if (hasImage && preprocessedFrames == null && sourceImage != null && !sourceImage.isRecycled) {
+            EfImagePreprocessor.preprocess(
+                source = sourceImage,
+                canvasWidth = canvasW,
+                canvasHeight = canvasH,
+                mode = design.imageSource.scaleMode
+            )
+        } else null
+
+        val sampleFrames: List<Bitmap>? = preprocessedFrames?.filter { !it.isRecycled }
+        val sampleBitmap: Bitmap? = sampleFrames?.firstOrNull() ?: preprocessedImage
+        val isAdaptiveContrast = design.imageColorStrategy == ImageColorStrategy.ADAPTIVE_CONTRAST && (sampleFrames?.isNotEmpty() == true || (sampleBitmap != null && !sampleBitmap.isRecycled))
+        val candidatePalette = adaptiveColors?.palette ?: emptyList()
+        val darkCandidates = if (isAdaptiveContrast) {
+            AdaptiveColorOptimizer.generateCandidatePool(
+                isDark = true,
+                referenceColor = dataDarkColor,
+                palette = candidatePalette
+            )
+        } else emptyList()
+        val lightCandidates = if (isAdaptiveContrast) {
+            AdaptiveColorOptimizer.generateCandidatePool(
+                isDark = false,
+                referenceColor = dataLightColor,
+                palette = candidatePalette
+            )
+        } else emptyList()
+
+        var totalOptimizedModules = 0
+        var targetMetCount = 0
+        var minAchievedContrast = 21.0f
+        var sumAchievedContrast = 0.0f
+        var sumDeltaE = 0.0f
+
+        val sampleEffectiveLuminance: (Bitmap, Float, Float) -> Float = { frame, normU, normV ->
+            val cx = x0 + normU * canvasW
+            val cy = y0 + normV * canvasH
+
+            // 1. Solid canvas backdrop
+            val bg = if (colorAlpha(resolvedBackdropColor) > 0) resolvedBackdropColor else Color.WHITE
+            var r = (bg ushr 16) and 0xFF
+            var g = (bg ushr 8) and 0xFF
+            var b = bg and 0xFF
+
+            // 2. Composite backdrop image if present
+            if (preprocessedBackdrop != null && !preprocessedBackdrop.isRecycled && width > 0f && height > 0f) {
+                val bx = ((cx / width) * preprocessedBackdrop.width).toInt().coerceIn(0, preprocessedBackdrop.width - 1)
+                val by = ((cy / height) * preprocessedBackdrop.height).toInt().coerceIn(0, preprocessedBackdrop.height - 1)
+                val bPixel = preprocessedBackdrop.getPixel(bx, by)
+                val bAlpha = (((bPixel ushr 24) and 0xFF) / 255.0f) * design.backdropStyle.imageAlpha.coerceIn(0f, 1f)
+                if (bAlpha > 0f) {
+                    r = (((bPixel ushr 16) and 0xFF) * bAlpha + r * (1f - bAlpha)).toInt()
+                    g = (((bPixel ushr 8) and 0xFF) * bAlpha + g * (1f - bAlpha)).toInt()
+                    b = ((bPixel and 0xFF) * bAlpha + b * (1f - bAlpha)).toInt()
+                }
+            }
+
+            // 3. Composite watermark image frame pixel over backdrop
+            val fx = (normU * frame.width).toInt().coerceIn(0, frame.width - 1)
+            val fy = (normV * frame.height).toInt().coerceIn(0, frame.height - 1)
+            val fPixel = frame.getPixel(fx, fy)
+            val fAlpha = (((fPixel ushr 24) and 0xFF) / 255.0f) * imageAlpha
+            if (fAlpha > 0f) {
+                r = (((fPixel ushr 16) and 0xFF) * fAlpha + r * (1f - fAlpha)).toInt()
+                g = (((fPixel ushr 8) and 0xFF) * fAlpha + g * (1f - fAlpha)).toInt()
+                b = ((fPixel and 0xFF) * fAlpha + b * (1f - fAlpha)).toInt()
+            }
+
+            ImageColorAnalyzer.relativeLuminance(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+        }
+
+        // Cache per-render joint optimization results keyed by quantized background signature (Audit Item 10 & Item 2).
+        // For single-frame designs, keys by (qP90, qP10) in 0.02 luminance buckets.
+        // For multi-frame animated designs, keys by the full temporal vector of per-frame (qP90, qP10) buckets,
+        // preserving worst-case temporal guarantees without conflating different dynamic distributions.
+        val jointOptimizationCache = HashMap<AdaptiveCacheKey, JointColorOptimizationResult>()
+
+        val resolveDataColor: (Int, Int, Boolean) -> Int = { col, row, isDark ->
+            if (isAdaptiveContrast) {
+                val distributions = if (sampleFrames != null && sampleFrames.size > 1) {
+                    sampleFrames.map { frame ->
+                        FootprintSampler.sampleModuleDistribution(
+                            col = col,
+                            row = row,
+                            matrixSize = n,
+                            dataScale = dataScale,
+                            shape = dataShape
+                        ) { u, v -> sampleEffectiveLuminance(frame, u, v) }
+                    }
+                } else {
+                    listOf(
+                        FootprintSampler.sampleModuleDistribution(
+                            col = col,
+                            row = row,
+                            matrixSize = n,
+                            dataScale = dataScale,
+                            shape = dataShape
+                        ) { u, v -> sampleEffectiveLuminance(sampleBitmap!!, u, v) }
+                    )
+                }
+
+                // Pass complete spatial context directly into the optimizer
+                val spatialContext = SpatialModuleContext(distributions, SamplingObjective.PERCENTILE_90_10)
+
+                // Quantize distribution p90/p10 into 50 buckets (0.02 step) per frame to preserve temporal dynamics
+                val cacheKey: AdaptiveCacheKey = if (distributions.size == 1) {
+                    val d0 = distributions[0]
+                    val qP90 = (d0.p90 * 50f).toInt().coerceIn(0, 50)
+                    val qP10 = (d0.p10 * 50f).toInt().coerceIn(0, 50)
+                    AdaptiveCacheKey.Single(qP90, qP10)
+                } else {
+                    val buckets = IntArray(distributions.size)
+                    for (i in distributions.indices) {
+                        val di = distributions[i]
+                        val qP90 = (di.p90 * 50f).toInt().coerceIn(0, 50)
+                        val qP10 = (di.p10 * 50f).toInt().coerceIn(0, 50)
+                        buckets[i] = (qP90 shl 8) or (qP10 and 0xFF)
+                    }
+                    AdaptiveCacheKey.Multi(buckets)
+                }
+
+                val joint = jointOptimizationCache.getOrPut(cacheKey) {
+                    AdaptiveColorOptimizer.optimizeJointWithSpatialContext(
+                        context = spatialContext,
+                        darkCandidates = darkCandidates,
+                        lightCandidates = lightCandidates,
+                        defaultDark = dataDarkColor,
+                        defaultLight = dataLightColor
+                    )
+                }
+
+                val chosen = if (isDark) joint.dark else joint.light
+                totalOptimizedModules++
+                if (chosen.targetMet) targetMetCount++
+                minAchievedContrast = minOf(minAchievedContrast, chosen.contrastRatio)
+                sumAchievedContrast += chosen.contrastRatio
+                sumDeltaE += chosen.adjustmentDistance
+
+                chosen.color
+            } else {
+                if (isDark) dataDarkColor else dataLightColor
+            }
+        }
+
+        // 2. Transparent Pre-Pass (EFQRCode: ONLY executed when hasImage && allowTransparent)
+        if (hasImage && allowTransparent) {
+            for (col in 0 until n) {
+                for (row in 0 until n) {
+                    val type = matrix.typeAt(col, row)
+                    val isTimingNone = type == ModuleType.TIMING && timingShape == ModuleShape.NONE
+                    val isAlignNone = (type == ModuleType.ALIGN_CENTER || type == ModuleType.ALIGN_OTHER) && alignShape == ModuleShape.NONE
+                    if (type == ModuleType.POS_CENTER || type == ModuleType.POS_OTHER) {
+                        // Skip finder modules in pre-pass
+                    } else if (type == ModuleType.TIMING && !isTimingNone) {
+                        // Skip active timing modules in pre-pass
+                    } else if ((type == ModuleType.ALIGN_CENTER || type == ModuleType.ALIGN_OTHER) && !isAlignNone) {
+                        // Skip active alignment modules in pre-pass
+                    } else {
+                        val isDark = matrix.isDark(col, row)
+                        val color = if (isDark) dataDarkColor else dataLightColor
+                        if (colorAlpha(color) > 0) {
+                            createModuleShapeNode(x0 + col * mSize, y0 + row * mSize, mSize, dataShape, color)?.let { nodes.add(it) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Image Layer with 8x8 Finder Cutout Mask (#hole) (EFQRCode: ONLY created when hasImage is true)
+        if (hasImage) {
+            val finderW = 8 * mSize
+            val tlFinderRect = RectF(x0, y0, x0 + finderW, y0 + finderW)
+            val trFinderRect = RectF(x0 + (n - 8) * mSize, y0, x0 + n * mSize, y0 + finderW)
+            val blFinderRect = RectF(x0, y0 + (n - 8) * mSize, x0 + finderW, y0 + n * mSize)
+
+            masks["hole"] = QrMaskDefinition(
+                id = "hole",
+                bounds = RectF(x0, y0, x0 + canvasW, y0 + canvasH),
+                clipOutRects = listOf(tlFinderRect, trFinderRect, blFinderRect),
+                maskNodes = listOf(
+                    RectNode(x = x0, y = y0, width = canvasW, height = canvasH, fill = 0xFFFFFFFF.toInt(), fillString = "white"),
+                    RectNode(x = x0, y = y0, width = finderW, height = finderW, fill = 0xFF000000.toInt(), fillString = "black"),
+                    RectNode(x = x0 + (n - 8) * mSize, y = y0, width = finderW, height = finderW, fill = 0xFF000000.toInt(), fillString = "black"),
+                    RectNode(x = x0, y = y0 + (n - 8) * mSize, width = finderW, height = finderW, fill = 0xFF000000.toInt(), fillString = "black")
+                )
+            )
+
+            if (preprocessedFrames != null && preprocessedFrames.isNotEmpty()) {
+                nodes.add(
+                    AnimatedImageNode(
+                        x = x0,
+                        y = y0,
+                        width = canvasW,
+                        height = canvasH,
+                        frames = preprocessedFrames,
+                        frameDelaysMs = design.imageSource.frameDelaysMs ?: emptyList(),
+                        opacity = imageAlpha,
+                        preserveAspectRatio = "",
+                        maskId = "hole",
+                        clipOutRects = listOf(tlFinderRect, trFinderRect, blFinderRect),
+                        framePrefix = "${VeilIconPipeline.nextUniqueMark()}fm"
+                    )
+                )
+            } else if (preprocessedImage != null && !preprocessedImage.isRecycled) {
+                nodes.add(
+                    ImageNode(
+                        x = x0,
+                        y = y0,
+                        width = canvasW,
+                        height = canvasH,
+                        bitmap = preprocessedImage,
+                        opacity = imageAlpha,
+                        preserveAspectRatio = "",
+                        maskId = "hole",
+                        clipOutRects = listOf(tlFinderRect, trFinderRect, blFinderRect)
+                    )
+                )
+            }
+        }
+
+        // 4. Single Canonical EFQRCode Traversal: x-major / y-minor (col in 0 until n, row in 0 until n)
+        // Traversal priority per EFQRCodeStyleImage.swift:690-850:
+        // ALIGN -> TIMING -> POS_CENTER -> POS_OTHER (skip) -> DATA
+        val alignOffset = (1.0f - alignSize) / 2.0f
+        val timingOffset = (1.0f - timingSize) / 2.0f
+        val dataOffset = (1.0f - dataScale) / 2.0f
+
+        for (col in 0 until n) {
+            for (row in 0 until n) {
+                val isDark = matrix.isDark(col, row)
+                val type = matrix.typeAt(col, row)
+
+                if (type == ModuleType.ALIGN_CENTER || type == ModuleType.ALIGN_OTHER) {
+                    if (alignShape != ModuleShape.NONE) {
+                        val color = if (isDark) alignDarkColor else alignLightColor
+                        if (colorAlpha(color) > 0) {
+                            val ax = x0 + (col + alignOffset) * mSize
+                            val ay = y0 + (row + alignOffset) * mSize
+                            createModuleShapeNode(ax, ay, alignSize * mSize, alignShape, color)?.let { nodes.add(it) }
+                        }
+                    }
+                } else if (type == ModuleType.TIMING) {
+                    if (timingShape != ModuleShape.NONE) {
+                        val color = if (isDark) timingDarkColor else timingLightColor
+                        if (colorAlpha(color) > 0) {
+                            val tx = x0 + (col + timingOffset) * mSize
+                            val ty = y0 + (row + timingOffset) * mSize
+                            createModuleShapeNode(tx, ty, timingSize * mSize, timingShape, color)?.let { nodes.add(it) }
+                        }
+                    }
+                } else if (type == ModuleType.POS_CENTER) {
+                    val markArr = when {
+                        col > row -> floatArrayOf(0f, -1f)
+                        col < row -> floatArrayOf(-1f, 0f)
+                        else -> floatArrayOf(-1f, -1f)
+                    }
+                    val bgCol = col - 4 - markArr[0].toInt()
+                    val bgRow = row - 4 - markArr[1].toInt()
+                    appendFinderIrNodes(
+                        nodes = nodes,
+                        x0 = x0,
+                        y0 = y0,
+                        cx = col + 0.5f,
+                        cy = row + 0.5f,
+                        bgCol = bgCol,
+                        bgRow = bgRow,
+                        mSize = mSize,
+                        style = posStyle,
+                        darkColor = posDarkColor,
+                        lightColor = posLightColor,
+                        sizeFactor = posSize
+                    )
+                } else if (type == ModuleType.POS_OTHER) {
+                    continue
+                } else {
+                    if (dataShape != ModuleShape.NONE) {
+                        val color = resolveDataColor(col, row, isDark)
+                        if (colorAlpha(color) > 0) {
+                            val dx = x0 + (col + dataOffset) * mSize
+                            val dy = y0 + (row + dataOffset) * mSize
+                            createModuleShapeNode(dx, dy, dataScale * mSize, dataShape, color)?.let { nodes.add(it) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Center Logo
+        VeilIconPipeline.appendIconNodes(
+            nodes = nodes,
+            defs = defs,
+            design = design,
+            ox = geometry.offsetX,
+            oy = geometry.offsetY,
+            qrPixelSize = matrix.size * geometry.moduleSize,
+            masks = masks
+        )
+
+        val hasCornerClip = design.backdropStyle.cornerRadius > 0f
+        if (hasCornerClip) {
+            val crPx = design.backdropStyle.cornerRadius * mSize
+            val cornerPath = android.graphics.Path().apply {
+                addRoundRect(0f, 0f, width, height, crPx, crPx, android.graphics.Path.Direction.CW)
+            }
+            masks["rounded-corners"] = QrMaskDefinition(
+                id = "rounded-corners",
+                clipPath = cornerPath,
+                bounds = RectF(0f, 0f, width, height),
+                isClipPath = true,
+                rx = crPx,
+                ry = crPx
+            )
+        }
+
+        val diagnostics = if (isAdaptiveContrast) {
+            if (totalOptimizedModules > 0) {
+                QrOptimizationDiagnostics(
+                    totalOptimizedModules = totalOptimizedModules,
+                    targetMetCount = targetMetCount,
+                    minAchievedContrast = minAchievedContrast,
+                    meanAchievedContrast = sumAchievedContrast / totalOptimizedModules,
+                    meanDeltaEOk = sumDeltaE / totalOptimizedModules,
+                    allTargetsMet = (targetMetCount == totalOptimizedModules)
+                )
+            } else {
+                QrOptimizationDiagnostics(
+                    totalOptimizedModules = 0,
+                    targetMetCount = 0,
+                    minAchievedContrast = null,
+                    meanAchievedContrast = null,
+                    meanDeltaEOk = null,
+                    allTargetsMet = true
+                )
+            }
+        } else null
+
+        return QrGeometryIr(
+            width = width,
+            height = height,
+            viewBox = QrGeometryIr.defaultViewBox(width, height),
+            defs = defs,
+            masks = masks,
+            rootNodes = nodes,
+            diagnostics = diagnostics
+        )
+    }
+
+    private fun appendFinderIrNodes(
+        nodes: MutableList<QrGeometryNode>,
+        x0: Float,
+        y0: Float,
+        cx: Float,
+        cy: Float,
+        bgCol: Int,
+        bgRow: Int,
+        mSize: Float,
+        style: FinderStyle,
+        darkColor: Int,
+        lightColor: Int,
+        sizeFactor: Float
+    ) {
+        // 8x8 backing rect
+        val lightAlpha = colorAlpha(lightColor)
+        val lightOp = lightAlpha / 255f
+        val lightOpaque = (lightColor and 0x00FFFFFF) or (0xFF shl 24)
+        nodes.add(
+            RectNode(
+                x = x0 + bgCol * mSize,
+                y = y0 + bgRow * mSize,
+                width = 8 * mSize,
+                height = 8 * mSize,
+                fill = lightOpaque,
+                opacity = lightOp,
+                opacityString = String.format(Locale.US, "%.2f", lightOp),
+                alwaysEmitOpacity = true
+            )
+        )
+
+        val centerPx = x0 + cx * mSize
+        val centerPy = y0 + cy * mSize
+
+        val darkAlpha = colorAlpha(darkColor)
+        val darkOp = darkAlpha / 255f
+        val darkOpaque = (darkColor and 0x00FFFFFF) or (0xFF shl 24)
+
+        when (style) {
+            FinderStyle.CIRCLE -> {
+                nodes.add(CircleNode(centerPx, centerPy, 1.5f * mSize, fill = darkOpaque, opacity = darkOp))
+                val sw = 1.0f * sizeFactor * mSize
+                val swStr = if (sw % 1f == 0f) sw.toInt().toString() else String.format(Locale.US, "%.4f", sw).trimEnd('0').trimEnd('.')
+                nodes.add(
+                    CircleNode(
+                        cx = centerPx,
+                        cy = centerPy,
+                        radius = 3.0f * mSize,
+                        stroke = darkOpaque,
+                        strokeWidth = sw,
+                        strokeWidthString = swStr,
+                        opacity = darkOp
+                    )
+                )
+            }
+            FinderStyle.ROUNDED -> {
+                nodes.add(CircleNode(centerPx, centerPy, 1.5f * mSize, fill = darkOpaque, opacity = darkOp))
+                val ox = centerPx - 0.5f * mSize
+                val oy = centerPy - 0.5f * mSize
+                val squirclePath = com.veilframe.app.qr.model.QrVisualGeometry.createSquirclePath(
+                    RectF(ox - 2.5f * mSize, oy - 2.5f * mSize, ox + 3.5f * mSize, oy + 3.5f * mSize)
+                )
+                nodes.add(
+                    PathNode(
+                        svgPathData = VeilPositionPatternGeometry.SQ25_PATH,
+                        androidPath = squirclePath,
+                        fill = null,
+                        stroke = darkOpaque,
+                        strokeWidth = 100f / 6f * sizeFactor,
+                        canvasStrokeWidth = 1f * sizeFactor * mSize,
+                        opacity = darkOp,
+                        transform = "translate(${ox - 2.5f * mSize},${oy - 2.5f * mSize}) scale(${6f * mSize / 100f},${6f * mSize / 100f})"
+                    )
+                )
+            }
+            FinderStyle.PLANETS -> {
+                nodes.add(CircleNode(centerPx, centerPy, 1.5f * mSize, fill = darkOpaque, opacity = darkOp))
+                val sw = 0.15f * mSize
+                val swStr = if (sw % 1f == 0f) sw.toInt().toString() else String.format(Locale.US, "%.4f", sw).trimEnd('0').trimEnd('.')
+                val dash = String.format(Locale.US, "%.4f", 0.5f * mSize).trimEnd('0').trimEnd('.')
+                nodes.add(
+                    CircleNode(
+                        cx = centerPx,
+                        cy = centerPy,
+                        radius = 3.0f * mSize,
+                        stroke = darkOpaque,
+                        strokeWidth = sw,
+                        strokeWidthString = swStr,
+                        strokeDashArray = "$dash,$dash",
+                        opacity = darkOp
+                    )
+                )
+                val planetRadius = 0.5f * sizeFactor * mSize
+                val offsets = floatArrayOf(-3f, 3f)
+                for (dx in offsets) {
+                    nodes.add(CircleNode(centerPx + dx * mSize, centerPy, planetRadius, fill = darkOpaque, opacity = darkOp))
+                }
+                for (dy in offsets) {
+                    nodes.add(CircleNode(centerPx, centerPy + dy * mSize, planetRadius, fill = darkOpaque, opacity = darkOp))
+                }
+            }
+            FinderStyle.DSJ -> {
+                val widthVal = (2.0f + sizeFactor) * mSize
+                val armDim = sizeFactor * mSize
+                nodes.add(RectNode(centerPx - widthVal / 2f, centerPy - widthVal / 2f, widthVal, widthVal, fill = darkOpaque, opacity = darkOp))
+                nodes.add(RectNode((centerPx - 3f * mSize) - armDim / 2f, centerPy - widthVal / 2f, armDim, widthVal, fill = darkOpaque, opacity = darkOp))
+                nodes.add(RectNode((centerPx + 3f * mSize) - armDim / 2f, centerPy - widthVal / 2f, armDim, widthVal, fill = darkOpaque, opacity = darkOp))
+                nodes.add(RectNode(centerPx - widthVal / 2f, (centerPy - 3f * mSize) - armDim / 2f, widthVal, armDim, fill = darkOpaque, opacity = darkOp))
+                nodes.add(RectNode(centerPx - widthVal / 2f, (centerPy + 3f * mSize) - armDim / 2f, widthVal, armDim, fill = darkOpaque, opacity = darkOp))
+            }
+            else -> {
+                nodes.add(RectNode(centerPx - 1.5f * mSize, centerPy - 1.5f * mSize, 3f * mSize, 3f * mSize, fill = darkOpaque, opacity = darkOp))
+                val sw = 1.0f * sizeFactor * mSize
+                val swStr = if (sw % 1f == 0f) sw.toInt().toString() else String.format(Locale.US, "%.4f", sw).trimEnd('0').trimEnd('.')
+                nodes.add(
+                    RectNode(
+                        x = centerPx - 3.0f * mSize,
+                        y = centerPy - 3.0f * mSize,
+                        width = 6f * mSize,
+                        height = 6f * mSize,
+                        stroke = darkOpaque,
+                        strokeWidth = sw,
+                        strokeWidthString = swStr,
+                        opacity = darkOp
+                    )
+                )
+            }
+        }
+    }
+
+    private fun colorAlpha(color: Int): Int = (color ushr 24) and 0xFF
+
+    private fun createModuleShapeNode(
+        x: Float,
+        y: Float,
+        size: Float,
+        shape: ModuleShape,
+        color: Int
+    ): QrGeometryNode? {
+        if (shape == ModuleShape.NONE) return null
+        val alpha = colorAlpha(color)
+        if (alpha == 0) return null
+        val op = alpha / 255f
+        val opaqueColor = (color and 0x00FFFFFF) or (0xFF shl 24)
+        return when (shape) {
+            ModuleShape.CIRCLE, ModuleShape.DOT, ModuleShape.BUBBLE -> {
+                CircleNode(
+                    cx = x + size / 2f,
+                    cy = y + size / 2f,
+                    radius = size / 2f,
+                    fill = opaqueColor,
+                    opacity = op
+                )
+            }
+            ModuleShape.ROUNDED, ModuleShape.SQUIRCLE -> {
+                val rx = size * 0.25f
+                RectNode(
+                    x = x,
+                    y = y,
+                    width = size,
+                    height = size,
+                    rx = rx,
+                    ry = rx,
+                    fill = opaqueColor,
+                    opacity = op
+                )
+            }
+            else -> {
+                RectNode(
+                    x = x,
+                    y = y,
+                    width = size,
+                    height = size,
+                    fill = opaqueColor,
+                    opacity = op
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Quantized cache key for adaptive color optimization.
+ * Distinguishes single-frame static backgrounds from multi-frame animated sequences,
+ * preventing temporal conflation across varying frame dynamics.
+ */
+sealed interface AdaptiveCacheKey {
+    data class Single(val qP90: Int, val qP10: Int) : AdaptiveCacheKey
+    data class Multi(val frameBuckets: IntArray) : AdaptiveCacheKey {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Multi) return false
+            return frameBuckets.contentEquals(other.frameBuckets)
+        }
+        override fun hashCode(): Int = frameBuckets.contentHashCode()
+    }
+}

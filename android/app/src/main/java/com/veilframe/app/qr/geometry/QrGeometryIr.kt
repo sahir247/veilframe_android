@@ -1,0 +1,284 @@
+package com.veilframe.app.qr.geometry
+
+import android.graphics.Bitmap
+import android.graphics.Path
+import android.graphics.RectF
+
+/**
+ * Backend-neutral paint fill definition (Solid, LinearGradient, RadialGradient).
+ * Bridges Canvas Shader allocation with SVG gradient element references.
+ */
+sealed interface GeometryFill {
+    data class Solid(val color: Int) : GeometryFill
+    data class LinearGradient(
+        val startColor: Int,
+        val endColor: Int,
+        val x0: Float,
+        val y0: Float,
+        val x1: Float,
+        val y1: Float
+    ) : GeometryFill {
+        companion object {
+            fun fromAngle(
+                width: Float,
+                height: Float,
+                startColor: Int,
+                endColor: Int,
+                angleDegrees: Float
+            ): LinearGradient {
+                val cx = width / 2f
+                val cy = height / 2f
+                val rad = Math.toRadians(angleDegrees.toDouble())
+                val halfLen = (Math.abs(width * Math.cos(rad)) + Math.abs(height * Math.sin(rad))) / 2.0
+                val dx = (Math.cos(rad) * halfLen).toFloat()
+                val dy = (Math.sin(rad) * halfLen).toFloat()
+                return LinearGradient(
+                    startColor = startColor,
+                    endColor = endColor,
+                    x0 = cx - dx,
+                    y0 = cy - dy,
+                    x1 = cx + dx,
+                    y1 = cy + dy
+                )
+            }
+        }
+    }
+    data class RadialGradient(
+        val centerColor: Int,
+        val edgeColor: Int,
+        val cx: Float,
+        val cy: Float,
+        val radius: Float
+    ) : GeometryFill
+}
+
+/**
+ * Unified Geometry Intermediate Representation (IR) node.
+ * Single source of truth for both Canvas rasterization and SVG vector emission.
+ */
+sealed interface QrGeometryNode
+
+data class RectNode(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val rx: Float = 0f,
+    val ry: Float = 0f,
+    val fill: Int? = null,
+    val fillString: String? = null,
+    val geometryFill: GeometryFill? = null,
+    val stroke: Int? = null,
+    val strokeWidth: Float = 0f,
+    val strokeWidthString: String? = null,
+    val opacity: Float = 1f,
+    val opacityString: String? = null,
+    val alwaysEmitOpacity: Boolean = false,
+    val transform: String? = null
+) : QrGeometryNode
+
+data class CircleNode(
+    val cx: Float,
+    val cy: Float,
+    val radius: Float,
+    val fill: Int? = null,
+    val fillString: String? = null,
+    val geometryFill: GeometryFill? = null,
+    val stroke: Int? = null,
+    val strokeWidth: Float = 0f,
+    val strokeWidthString: String? = null,
+    val opacity: Float = 1f,
+    val strokeDashArray: String? = null
+) : QrGeometryNode
+
+data class LineNode(
+    val x1: Float,
+    val y1: Float,
+    val x2: Float,
+    val y2: Float,
+    val strokeColor: Int,
+    val strokeWidth: Float,
+    val isRoundCap: Boolean = true,
+    val strokeDashArray: String? = null
+) : QrGeometryNode
+
+data class PolygonNode(
+    val points: String,
+    val pointsList: List<Pair<Float, Float>> = emptyList(),
+    val fill: Int? = null,
+    val fillString: String? = null,
+    val geometryFill: GeometryFill? = null,
+    val stroke: Int? = null,
+    val strokeWidth: Float = 0f,
+    val opacity: Float = 1f,
+    val transform: String? = null
+) : QrGeometryNode
+
+data class PathNode(
+    val svgPathData: String,
+    val androidPath: Path? = null,
+    val fill: Int? = null,
+    val fillString: String? = null,
+    val geometryFill: GeometryFill? = null,
+    val stroke: Int? = null,
+    val strokeWidth: Float = 0f,
+    val strokeWidthString: String? = null,
+    val canvasStrokeWidth: Float = strokeWidth,
+    val opacity: Float = 1f,
+    val transform: String? = null
+) : QrGeometryNode
+
+data class AnimatedGroupNode(
+    val framePrefix: String = "resfm",
+    val frameNodes: List<List<QrGeometryNode>>,
+    val frameDelaysMs: List<Int>
+) : QrGeometryNode
+
+data class ImageNode(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val bitmap: Bitmap? = null,
+    val base64Data: String? = null,
+    val opacity: Float = 1f,
+    val preserveAspectRatio: String = "xMidYMid slice",
+    val maskId: String? = null,
+    val clipPathId: String? = null,
+    val clipOutRects: List<RectF> = emptyList(),
+    val clipPath: Path? = null,
+    val transform: String? = null,
+    val style: String? = null,
+    val key: String? = null
+) : QrGeometryNode
+
+data class AnimatedImageNode(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val frames: List<Bitmap> = emptyList(),
+    val base64Frames: List<String> = emptyList(),
+    val frameDelaysMs: List<Int> = emptyList(),
+    val opacity: Float = 1f,
+    val preserveAspectRatio: String = "xMidYMid slice",
+    val maskId: String? = null,
+    val clipPathId: String? = null,
+    val clipOutRects: List<RectF> = emptyList(),
+    val clipPath: Path? = null,
+    val transform: String? = null,
+    val style: String? = null,
+    val framePrefix: String = "1fm"
+) : QrGeometryNode
+
+data class GroupNode(
+    val children: List<QrGeometryNode>,
+    val maskId: String? = null,
+    val clipPathId: String? = null,
+    val clipPath: Path? = null,
+    val clipOutRects: List<RectF> = emptyList(),
+    val opacity: Float = 1f,
+    val transform: String? = null
+) : QrGeometryNode
+
+/**
+ * Backend-neutral mask and clipping definition.
+ * Holds canonical vector paths, bounding exclusion rectangles, and geometry nodes for Canvas and SVG parity.
+ */
+data class QrMaskDefinition(
+    val id: String,
+    val clipPath: Path? = null,
+    val clipOutRects: List<RectF> = emptyList(),
+    val bounds: RectF? = null,
+    val maskNodes: List<QrGeometryNode> = emptyList(),
+    val isClipPath: Boolean = false,
+    val rx: Float = 0f,
+    val ry: Float = 0f
+)
+
+/**
+ * Diagnostic metrics for adaptive color optimization performed during IR generation.
+ */
+data class QrOptimizationDiagnostics(
+    val totalOptimizedModules: Int = 0,
+    val targetMetCount: Int = 0,
+    val minAchievedContrast: Float? = null,
+    val meanAchievedContrast: Float? = null,
+    val meanDeltaEOk: Float? = null,
+    val allTargetsMet: Boolean = true
+) {
+    val hasMeasurements: Boolean get() = totalOptimizedModules > 0
+}
+
+/**
+ * Complete document-level geometry definition for a QR code.
+ */
+class QrGeometryIr(
+    val width: Float,
+    val height: Float,
+    val viewBox: String = defaultViewBox(width, height),
+    defs: List<String> = emptyList(),
+    val masks: Map<String, QrMaskDefinition> = emptyMap(),
+    val rootNodes: List<QrGeometryNode> = emptyList(),
+    val diagnostics: QrOptimizationDiagnostics? = null
+) {
+    val defs: List<String> = if (masks.isNotEmpty()) {
+        val list = ArrayList<String>(defs.size + masks.size)
+        list.addAll(defs)
+        for ((id, mask) in masks) {
+            if (defs.none { it.contains("id=\"$id\"") }) {
+                val rendered = IrSvgRenderer.renderMaskDefinition(mask)
+                if (rendered.isNotEmpty()) list.add(rendered)
+            }
+        }
+        list
+    } else {
+        defs
+    }
+
+    fun copy(
+        width: Float = this.width,
+        height: Float = this.height,
+        viewBox: String = this.viewBox,
+        defs: List<String> = this.defs,
+        masks: Map<String, QrMaskDefinition> = this.masks,
+        rootNodes: List<QrGeometryNode> = this.rootNodes,
+        diagnostics: QrOptimizationDiagnostics? = this.diagnostics
+    ): QrGeometryIr = QrGeometryIr(width, height, viewBox, defs, masks, rootNodes, diagnostics)
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as QrGeometryIr
+        return width == other.width &&
+                height == other.height &&
+                viewBox == other.viewBox &&
+                defs == other.defs &&
+                masks == other.masks &&
+                rootNodes == other.rootNodes &&
+                diagnostics == other.diagnostics
+    }
+
+    override fun hashCode(): Int {
+        var result = width.hashCode()
+        result = 31 * result + height.hashCode()
+        result = 31 * result + viewBox.hashCode()
+        result = 31 * result + defs.hashCode()
+        result = 31 * result + masks.hashCode()
+        result = 31 * result + rootNodes.hashCode()
+        result = 31 * result + (diagnostics?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String {
+        return "QrGeometryIr(width=$width, height=$height, viewBox='$viewBox', defs=$defs, masks=$masks, rootNodes=$rootNodes, diagnostics=$diagnostics)"
+    }
+
+    companion object {
+        fun defaultViewBox(w: Float, h: Float): String {
+            val wStr = if (w % 1f == 0f) w.toInt().toString() else String.format(java.util.Locale.US, "%.4f", w).trimEnd('0').trimEnd('.')
+            val hStr = if (h % 1f == 0f) h.toInt().toString() else String.format(java.util.Locale.US, "%.4f", h).trimEnd('0').trimEnd('.')
+            return "0 0 $wStr $hStr"
+        }
+    }
+}

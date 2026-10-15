@@ -1,0 +1,56 @@
+# Gradle & Build Caches
+.gradle/
+**/android/.gradle/
+**/build/
+**/android/**/build/
+**/.cxx/
+**/.kotlin/
+**/jdk-*/
+android/jdk*/
+
+# Android Studio & IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.shelf/
+
+# Local & Machine Specific
+local.properties
+local.settings.json
+*.log
+
+# Keystores & Signing
+*.keystore
+*.jks
+release.keystore
+keystore_base64.txt
+
+# Packages & Precompiled Binaries
+*.apk
+*.aab
+*.aar
+*.so
+*.so.debug
+*.a
+**/jniLibs/
+**/cpp/ncnn/*/lib/
+
+# Large Pretrained Models & Assets (excluded for lightweight source inspection)
+*.onnx
+*.tflite
+*.caffemodel
+*.prototxt
+**/markdown/lib/
+
+# Large test scratch & benchmark streaming artifacts
+docs/device_validation_artifacts/
+**/upscale_streaming/
+scratch/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini

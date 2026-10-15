@@ -1,0 +1,188 @@
+package com.veilframe.app.qr.renderer
+
+import android.graphics.Bitmap
+import android.graphics.Color
+import com.veilframe.app.qr.model.ImageSourceStyle
+import com.veilframe.app.qr.model.QrMatrix
+
+/**
+ * Streaming callback sink for 3x3 stochastic subpixel primitives.
+ *
+ * Avoids allocating large intermediate collections for large QR matrices (e.g. Version 40 = 281,961 subpixels).
+ */
+fun interface SubpixelSink {
+    /**
+     * Emits a single subpixel position to be rendered.
+     *
+     * @param col The QR matrix module column (0 until matrix.size).
+     * @param row The QR matrix module row (0 until matrix.size).
+     * @param subX The subpixel x coordinate in [0, 3 * matrix.size).
+     * @param subY The subpixel y coordinate in [0, 3 * matrix.size).
+     * @param isCenterAnchor True if this is the center subpixel (dx=1, dy=1) reserved for the actual QR data bit.
+     */
+    fun emit(
+        col: Int,
+        row: Int,
+        subX: Int,
+        subY: Int,
+        isCenterAnchor: Boolean
+    )
+}
+
+/**
+ * Authoritative implementation of VeilFrame Art Engine-inspired 3x3 Stochastic Subpixel Resampling.
+ *
+ * Architecture & Design Contract:
+ * 1. Source image is scaled to (3N) x (3N) subpixels via [ImageScaleResolver].
+ * 2. Functional pattern participation is governed selectively by [ResamplePolicy]
+ *    (defaulting to [ArtisticResamplePolicy] matching EFQRCode's getGrayPointList()):
+ *    - Finder areas: 8x8 module regions (24x24 subpixels) at corners are strictly suppressed.
+ *    - Format & Version information: Participate in stochastic dither matching EF parity.
+ *    - Timing patterns (Row 6 / Column 6): Dark timing modules participate in stochastic dither;
+ *      light timing modules are conditionally suppressed based on timingStyle.shape.
+ *    - Alignment patterns: Dark alignment modules participate in stochastic dither;
+ *      light alignment modules are conditionally suppressed based on alignmentStyle.shape.
+ * 3. For every dark module permitted by [policy.shouldDrawAnchor], the center subpixel (dx=1, dy=1)
+ *    is strictly reserved as the QR anchor bit.
+ * 4. The surrounding 8 subpixels carry stochastic halftone dithering:
+ *    - Gamma luminance: Y = 0.2126*R + 0.7152*G + 0.0722*B
+ *    - VeilFrame Art Engine threshold: ((grayNorm + exposure - 0.5) * (contrast + 1.0) + 0.5).coerceIn(0, 1)
+ *    - Deterministic 64-bit splitmix hash PRNG: subpixelRandom(seed, subX, subY) > threshold
+ *    - Explicit [ImageScaleMode.ASPECT_FIT] padding suppression: coordinates in letterbox/pillarbox
+ *      margins are unconditionally suppressed, guaranteeing zero photo dither dots in margins
+ *      regardless of extreme contrast or exposure adjustments.
+ *
+ * Zero memory allocation during streaming traversal via [SubpixelSink].
+ */
+object ResampleSubpixelEngine {
+
+    /**
+     * Deterministic, allocation-free 64-bit splitmix hash generating a uniform float in [0.0f, 1.0f).
+     */
+    fun subpixelRandom(seed: Long, subX: Int, subY: Int): Float {
+        var h = seed xor (subX.toLong() * -7046029254386353131L) xor (subY.toLong() * -4132237089816223339L)
+        h = (h xor (h ushr 30)) * -4658895280553007687L
+        h = (h xor (h ushr 27)) * -7723596701193187605L
+        h = h xor (h ushr 31)
+        return ((h ushr 40) and 0xFFFFFFL).toFloat() / 16777216.0f
+    }
+
+    /**
+     * Exact VeilFrame Art Engine threshold formula with +1.0 contrast multiplier.
+     */
+    fun computeThreshold(grayNorm: Float, exposure: Float, contrast: Float): Float {
+        return ((grayNorm + exposure - 0.5f) * (contrast + 1.0f) + 0.5f).coerceIn(0.0f, 1.0f)
+    }
+
+    /**
+     * Calculates the resample threshold for a given pixel color and image style.
+     */
+    fun computeThreshold(pixelColor: Int, style: ImageSourceStyle): Float {
+        val grayNorm = ImageScaleResolver.calculatePixelLuminance(pixelColor)
+        return computeThreshold(grayNorm, style.exposure, style.contrast)
+    }
+
+    /**
+     * Traverses the QR matrix and emits all active subpixels into [sink] using an abstract [PixelSource].
+     *
+     * Protected modules and functional regions are governed by [policy].
+     * For dark data modules, the center anchor is emitted if permitted by [policy.shouldDrawAnchor].
+     */
+    fun traverseSubpixels(
+        matrix: QrMatrix,
+        pixelSource: PixelSource?,
+        style: ImageSourceStyle,
+        seed: Long = 42L,
+        policy: ResamplePolicy = ArtisticResamplePolicy,
+        includeCenterAnchors: Boolean = true,
+        sink: SubpixelSink
+    ) {
+        val n = matrix.size
+        val targetDim = 3 * n
+        var preScaledAuto: PreScaledPixelSource? = null
+
+        val effectiveSource: PixelSource? = when {
+            pixelSource == null -> null
+            pixelSource is PreScaledPixelSource -> pixelSource
+            pixelSource.width == targetDim && pixelSource.height == targetDim -> pixelSource
+            pixelSource is BitmapPixelSource -> {
+                preScaledAuto = ImageScaleResolver.createPreScaledSource(pixelSource.bitmap, targetDim, targetDim, style.scaleMode)
+                preScaledAuto
+            }
+            else -> {
+                preScaledAuto = ImageScaleResolver.createPreScaledArraySource(pixelSource, targetDim, targetDim, style.scaleMode)
+                preScaledAuto
+            }
+        }
+
+        try {
+            for (col in 0 until n) {
+                for (row in 0 until n) {
+                    // 1. Center subpixel (dx=1, dy=1): Reserved for actual QR data bit
+                    if (includeCenterAnchors && policy.shouldDrawAnchor(matrix, col, row)) {
+                        val centerSubX = 3 * col + 1
+                        val centerSubY = 3 * row + 1
+                        sink.emit(col, row, centerSubX, centerSubY, isCenterAnchor = true)
+                    }
+
+                    // 2. Surrounding 8 subpixels: Stochastic photo dithering
+                    if (effectiveSource != null) {
+                        for (dx in 0..2) {
+                            for (dy in 0..2) {
+                                if (dx == 1 && dy == 1) continue // Skip center anchor
+
+                                val sx = 3 * col + dx
+                                val sy = 3 * row + dy
+
+                                if (!policy.shouldSample(matrix, sx, sy)) continue
+
+                                val pixel = effectiveSource.getPixel(sx, sy)
+                                val grayNorm = ImageScaleResolver.calculatePixelLuminance(pixel, efPremultipliedAlpha = true)
+
+                                // Exact VeilFrame Art Engine threshold formula with +1.0 contrast multiplier
+                                val threshold = computeThreshold(grayNorm, style.exposure, style.contrast)
+
+                                val rnd = policy.sampleRandom(sx, sy, seed)
+                                if (rnd > threshold) {
+                                    sink.emit(col, row, sx, sy, isCenterAnchor = false)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            preScaledAuto?.bitmap?.recycle()
+        }
+    }
+
+    /**
+     * Traverses the QR matrix and emits all active subpixels into [sink] from a [Bitmap].
+     * Pre-scales [source] to (3 * matrix.size) x (3 * matrix.size) with Skia bilinear filtering
+     * matching pre-rendered 3N x 3N raster context sampling.
+     */
+    fun traverseSubpixels(
+        matrix: QrMatrix,
+        source: Bitmap?,
+        style: ImageSourceStyle,
+        seed: Long = 42L,
+        policy: ResamplePolicy = ArtisticResamplePolicy,
+        includeCenterAnchors: Boolean = true,
+        sink: SubpixelSink
+    ) {
+        val n = matrix.size
+        val targetDim = 3 * n
+        var preScaledSource: PreScaledPixelSource? = null
+
+        val pixelSource: PixelSource? = if (source != null && !source.isRecycled) {
+            preScaledSource = ImageScaleResolver.createPreScaledSource(source, targetDim, targetDim, style.scaleMode)
+            preScaledSource
+        } else null
+
+        try {
+            traverseSubpixels(matrix, pixelSource, style, seed, policy, includeCenterAnchors, sink)
+        } finally {
+            preScaledSource?.bitmap?.recycle()
+        }
+    }
+}

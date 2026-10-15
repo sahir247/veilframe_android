@@ -1,0 +1,487 @@
+package com.veilframe.app.qr.renderer
+
+import com.veilframe.app.qr.geometry.CircleNode
+import com.veilframe.app.qr.geometry.LineNode
+import com.veilframe.app.qr.geometry.QrGeometryNode
+import com.veilframe.app.qr.model.LineDirection
+import com.veilframe.app.qr.model.QrMatrix
+
+enum class LineOrientation {
+    HORIZONTAL,
+    VERTICAL,
+    DIAGONAL_DOWN,
+    DIAGONAL_UP
+}
+
+/**
+ * Geometric line segment representing a continuous contiguous run of QR modules.
+ */
+data class LineSegment(
+    val x1: Float,
+    val y1: Float,
+    val x2: Float,
+    val y2: Float,
+    val orientation: LineOrientation,
+    val strokeWidth: Float
+)
+
+/**
+ * Authoritative run-based topology builder for [com.veilframe.app.qr.QrStyle.LINE].
+ *
+ * Implements run-oriented line graph topology with true directional support:
+ * 1. Horizontal continuous runs (length >= 2).
+ * 2. Vertical continuous runs (length >= 2).
+ * 3. Diagonal down runs (x+i, y+i) and diagonal up runs (x+i, y-i) for [LineDirection.X].
+ * 4. Rounded stroke spines (isRoundCap = true).
+ * 5. Circular node pads at data module positions.
+ * 6. Target accent rings at key nodes (matching target circuit appearance).
+ * 7. Protected finder patterns.
+ */
+object LineTopologyBuilder {
+
+    private fun pseudoRandom(x: Int, y: Int, tag: Int, min: Float, max: Float): Float {
+        val hash = (x * 374761393 + y * 668265263 + tag * 982451653) and 0x7FFFFFFF
+        val norm = (hash % 10000) / 10000f
+        return min + norm * (max - min)
+    }
+
+    /**
+     * Builds the complete set of IR geometry nodes for the line data topology.
+     */
+    fun buildTopology(
+        matrix: QrMatrix,
+        ox: Float,
+        oy: Float,
+        cs: Float,
+        thicknessFraction: Float,
+        lineColor: Int,
+        direction: LineDirection = LineDirection.X,
+        addAccentRings: Boolean = false,
+        circuitBridgesEnabled: Boolean = false,
+        roundCaps: Boolean = true,
+        lengthFraction: Float = 1.0f,
+        variant: com.veilframe.app.qr.model.LineVariant = com.veilframe.app.qr.model.LineVariant.EF,
+        rngMode: ResampleRngMode = ResampleRngMode.DETERMINISTIC,
+        randomSource: (() -> Float)? = null
+    ): List<QrGeometryNode> {
+        val n = matrix.size
+        val nodes = mutableListOf<QrGeometryNode>()
+        val baseStrokeWidth = cs * thicknessFraction.coerceIn(0.05f, 0.85f)
+        // EFQRCode canonical node radius is strictly size / 2. Circuit mode applies stylistic padding.
+        val nodeRadius = if (variant == com.veilframe.app.qr.model.LineVariant.EF) {
+            baseStrokeWidth * 0.5f
+        } else {
+            (baseStrokeWidth * 0.55f).coerceAtLeast(cs * 0.18f)
+        }
+
+        // Mask of dark data modules (excluding finders)
+        val isDataDark = Array(n) { col ->
+            BooleanArray(n) { row ->
+                matrix.isDark(col, row) && !VeilPositionPatternGeometry.isFinderArea(col, row, n)
+            }
+        }
+        val unconsumed = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+
+        val segments = mutableListOf<LineSegment>()
+
+        when (direction) {
+            LineDirection.HORIZONTAL -> {
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                for (y in 0 until n) {
+                    var x = 0
+                    while (x < n) {
+                        if (ava[x][y]) {
+                            var end = x
+                            while (end + 1 < n && ava[end + 1][y]) {
+                                end++
+                            }
+                            if (end > x) {
+                                for (i in x..end) {
+                                    ava[i][y] = false
+                                    unconsumed[i][y] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (end + 0.5f) * cs
+                                val ly2 = oy + (y + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.HORIZONTAL, baseStrokeWidth))
+                            }
+                            x = end + 1
+                        } else {
+                            x++
+                        }
+                    }
+                }
+            }
+
+            LineDirection.VERTICAL -> {
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                for (x in 0 until n) {
+                    var y = 0
+                    while (y < n) {
+                        if (ava[x][y]) {
+                            var end = y
+                            while (end + 1 < n && ava[x][end + 1]) {
+                                end++
+                            }
+                            if (end > y) {
+                                for (i in y..end) {
+                                    ava[x][i] = false
+                                    unconsumed[x][i] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + 0.5f) * cs
+                                val ly2 = oy + (end + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.VERTICAL, baseStrokeWidth))
+                            }
+                            y = end + 1
+                        } else {
+                            y++
+                        }
+                    }
+                }
+            }
+
+            LineDirection.CROSS -> {
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                // 1. Vertical runs up to length 4 (runs first, consuming cells per EF)
+                for (x in 0 until n) {
+                    var y = 0
+                    while (y < n) {
+                        if (ava[x][y]) {
+                            var end = y
+                            while (end + 1 < n && ava[x][end + 1] && (end - y) < 3) {
+                                end++
+                            }
+                            if (end > y) {
+                                for (i in y..end) {
+                                    ava[x][i] = false
+                                    unconsumed[x][i] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + 0.5f) * cs
+                                val ly2 = oy + (end + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.VERTICAL, baseStrokeWidth))
+                            }
+                            y = end + 1
+                        } else {
+                            y++
+                        }
+                    }
+                }
+                // 2. Horizontal runs up to length 4 (runs second on remaining cells per EF)
+                for (y in 0 until n) {
+                    var x = 0
+                    while (x < n) {
+                        if (ava[x][y]) {
+                            var end = x
+                            while (end + 1 < n && ava[end + 1][y] && (end - x) < 3) {
+                                end++
+                            }
+                            if (end > x) {
+                                for (i in x..end) {
+                                    ava[i][y] = false
+                                    unconsumed[i][y] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (end + 0.5f) * cs
+                                val ly2 = oy + (y + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.HORIZONTAL, baseStrokeWidth))
+                            }
+                            x = end + 1
+                        } else {
+                            x++
+                        }
+                    }
+                }
+            }
+
+            LineDirection.LOOPBACK, LineDirection.LOOP -> {
+                // Quadrant partitioning: (x > y) != (x + y < n) selects vertical vs horizontal runs up to length 4
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                for (x in 0 until n) {
+                    for (y in 0 until n) {
+                        if ((x > y) != (x + y < n)) {
+                            // Vertical runs up to length 4
+                            if (y == 0 || (y > 0 && (!isDataDark[x][y - 1] || !ava[x][y - 1]))) {
+                                var end = 0
+                                while (y + end < n && isDataDark[x][y + end] && ava[x][y + end] && end <= 3) {
+                                    end++
+                                }
+                                if (end > 1) {
+                                    for (i in 0 until end) {
+                                        ava[x][y + i] = false
+                                        unconsumed[x][y + i] = false
+                                    }
+                                    val lx1 = ox + (x + 0.5f) * cs
+                                    val ly1 = oy + (y + 0.5f) * cs
+                                    val lx2 = ox + (x + 0.5f) * cs
+                                    val ly2 = oy + (y + end - 0.5f) * cs
+                                    segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.VERTICAL, baseStrokeWidth))
+                                }
+                            }
+                        } else {
+                            // Horizontal runs up to length 4
+                            if (x == 0 || (x > 0 && (!isDataDark[x - 1][y] || !ava[x - 1][y]))) {
+                                var end = 0
+                                while (x + end < n && isDataDark[x + end][y] && ava[x + end][y] && end <= 3) {
+                                    end++
+                                }
+                                if (end > 1) {
+                                    for (i in 0 until end) {
+                                        ava[x + i][y] = false
+                                        unconsumed[x + i][y] = false
+                                    }
+                                    val lx1 = ox + (x + 0.5f) * cs
+                                    val ly1 = oy + (y + 0.5f) * cs
+                                    val lx2 = ox + (x + end - 0.5f) * cs
+                                    val ly2 = oy + (y + 0.5f) * cs
+                                    segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.HORIZONTAL, baseStrokeWidth))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            LineDirection.TOP_LEFT_TO_BOTTOM_RIGHT, LineDirection.DIAGONAL_FORWARD -> {
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                for (x in 0 until n) {
+                    for (y in 0 until n) {
+                        if (ava[x][y] && (x == 0 || y == 0 || !isDataDark[x - 1][y - 1])) {
+                            var end = 0
+                            while (x + end < n && y + end < n && isDataDark[x + end][y + end]) {
+                                end++
+                            }
+                            if (end > 1) {
+                                for (i in 0 until end) {
+                                    ava[x + i][y + i] = false
+                                    unconsumed[x + i][y + i] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + end - 0.5f) * cs
+                                val ly2 = oy + (y + end - 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.DIAGONAL_DOWN, baseStrokeWidth))
+                            }
+                        }
+                    }
+                }
+            }
+
+            LineDirection.TOP_RIGHT_TO_BOTTOM_LEFT, LineDirection.DIAGONAL_BACKWARD -> {
+                val ava = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                for (x in 0 until n) {
+                    for (y in 0 until n) {
+                        if (ava[x][y] && (x == 0 || y == n - 1 || !isDataDark[x - 1][y + 1])) {
+                            var end = 0
+                            while (x + end < n && y - end >= 0 && isDataDark[x + end][y - end]) {
+                                end++
+                            }
+                            if (end > 1) {
+                                for (i in 0 until end) {
+                                    ava[x + i][y - i] = false
+                                    unconsumed[x + i][y - i] = false
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + end - 0.5f) * cs
+                                val ly2 = oy + (y - (end - 1) + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.DIAGONAL_UP, baseStrokeWidth))
+                            }
+                        }
+                    }
+                }
+            }
+
+            LineDirection.X -> {
+                // True X cross-hatching: both diagonal runs + circuit spine connectors
+                val avaUp = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                val avaDown = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+
+                // Diagonal UP: (x+i, y-i)
+                for (x in 0 until n) {
+                    for (y in 0 until n) {
+                        if (avaUp[x][y] && (x == 0 || y == n - 1 || !isDataDark[x - 1][y + 1])) {
+                            var end = 0
+                            while (x + end < n && y - end >= 0 && isDataDark[x + end][y - end]) {
+                                end++
+                            }
+                            if (end > 1) {
+                                for (i in 0 until end) avaUp[x + i][y - i] = false
+                                val sw = if (variant == com.veilframe.app.qr.model.LineVariant.EF) {
+                                    val factor = if (randomSource != null) {
+                                        0.30f + randomSource() * 0.70f
+                                    } else if (rngMode == ResampleRngMode.SYSTEM_UNSEEDED) {
+                                        0.30f + java.util.concurrent.ThreadLocalRandom.current().nextFloat() * 0.70f
+                                    } else {
+                                        pseudoRandom(x, y, 1, 0.30f, 1.0f)
+                                    }
+                                    (baseStrokeWidth * 0.5f) * factor
+                                } else {
+                                    baseStrokeWidth * pseudoRandom(x, y, 1, 0.45f, 1.0f)
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + end - 0.5f) * cs
+                                val ly2 = oy + (y - (end - 1) + 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.DIAGONAL_UP, sw))
+                            }
+                        }
+                    }
+                }
+
+                // Diagonal DOWN: (x+i, y+i)
+                for (x in 0 until n) {
+                    for (y in 0 until n) {
+                        if (avaDown[x][y] && (x == 0 || y == 0 || !isDataDark[x - 1][y - 1])) {
+                            var end = 0
+                            while (x + end < n && y + end < n && isDataDark[x + end][y + end]) {
+                                end++
+                            }
+                            if (end > 1) {
+                                for (i in 0 until end) avaDown[x + i][y + i] = false
+                                val sw = if (variant == com.veilframe.app.qr.model.LineVariant.EF) {
+                                    val factor = if (randomSource != null) {
+                                        0.30f + randomSource() * 0.70f
+                                    } else if (rngMode == ResampleRngMode.SYSTEM_UNSEEDED) {
+                                        0.30f + java.util.concurrent.ThreadLocalRandom.current().nextFloat() * 0.70f
+                                    } else {
+                                        pseudoRandom(x, y, 2, 0.30f, 1.0f)
+                                    }
+                                    (baseStrokeWidth * 0.5f) * factor
+                                } else {
+                                    baseStrokeWidth * pseudoRandom(x, y, 2, 0.45f, 1.0f)
+                                }
+                                val lx1 = ox + (x + 0.5f) * cs
+                                val ly1 = oy + (y + 0.5f) * cs
+                                val lx2 = ox + (x + end - 0.5f) * cs
+                                val ly2 = oy + (y + end - 0.5f) * cs
+                                segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.DIAGONAL_DOWN, sw))
+                            }
+                        }
+                    }
+                }
+
+                // In Target #6 circuit mode, also connect short orthogonal spine bridges between isolated clusters
+                if (circuitBridgesEnabled) {
+                    val avaH = Array(n) { col -> BooleanArray(n) { row -> isDataDark[col][row] } }
+                    for (y in 0 until n) {
+                        var x = 0
+                        while (x < n) {
+                            if (avaH[x][y]) {
+                                var end = x
+                                while (end + 1 < n && avaH[end + 1][y] && (end - x) < 3) {
+                                    end++
+                                }
+                                if (end > x && (x + y) % 3 == 0) {
+                                    for (i in x..end) avaH[i][y] = false
+                                    val lx1 = ox + (x + 0.5f) * cs
+                                    val ly1 = oy + (y + 0.5f) * cs
+                                    val lx2 = ox + (end + 0.5f) * cs
+                                    val ly2 = oy + (y + 0.5f) * cs
+                                    segments.add(LineSegment(lx1, ly1, lx2, ly2, LineOrientation.HORIZONTAL, baseStrokeWidth * 0.75f))
+                                }
+                                x = end + 1
+                            } else {
+                                x++
+                            }
+                        }
+                    }
+                }
+            }
+
+            else -> {}
+        }
+
+        // 1. Emit all line spine segments with applied lengthFraction and roundCaps
+        val clampedLength = lengthFraction.coerceIn(0.05f, 1.0f)
+        for (seg in segments) {
+            val (sx, sy, ex, ey) = if (clampedLength < 0.999f) {
+                val midX = (seg.x1 + seg.x2) * 0.5f
+                val midY = (seg.y1 + seg.y2) * 0.5f
+                val halfDx = (seg.x2 - seg.x1) * 0.5f * clampedLength
+                val halfDy = (seg.y2 - seg.y1) * 0.5f * clampedLength
+                floatArrayOf(midX - halfDx, midY - halfDy, midX + halfDx, midY + halfDy)
+            } else {
+                floatArrayOf(seg.x1, seg.y1, seg.x2, seg.y2)
+            }
+
+            nodes.add(
+                LineNode(
+                    x1 = sx,
+                    y1 = sy,
+                    x2 = ex,
+                    y2 = ey,
+                    strokeColor = lineColor,
+                    strokeWidth = seg.strokeWidth,
+                    isRoundCap = roundCaps
+                )
+            )
+        }
+
+        // 2. Circular node pads and target rings at data module positions
+        for (x in 0 until n) {
+            for (y in 0 until n) {
+                if (!isDataDark[x][y]) continue
+
+                val cx = ox + (x + 0.5f) * cs
+                val cy = oy + (y + 0.5f) * cs
+
+                if (direction == LineDirection.X) {
+                    // Variable radius node circle: EFQRCode canonical formula is 0.5 * random(0.33...0.9)
+                    val rFactor = if (variant == com.veilframe.app.qr.model.LineVariant.EF) {
+                        if (randomSource != null) {
+                            0.33f + randomSource() * (0.90f - 0.33f)
+                        } else if (rngMode == ResampleRngMode.SYSTEM_UNSEEDED) {
+                            0.33f + java.util.concurrent.ThreadLocalRandom.current().nextFloat() * (0.90f - 0.33f)
+                        } else {
+                            pseudoRandom(x, y, 3, 0.33f, 0.90f)
+                        }
+                    } else {
+                        pseudoRandom(x, y, 3, 0.40f, 0.88f)
+                    }
+                    val r = cs * 0.5f * rFactor * clampedLength.coerceIn(0.5f, 1.0f)
+                    nodes.add(CircleNode(cx, cy, r, fill = lineColor))
+
+                    // Accent target rings on selected circuit nodes (Target #6)
+                    if (addAccentRings && (x * 17 + y * 23) % 7 == 0) {
+                        val ringR = cs * 0.46f * clampedLength.coerceIn(0.5f, 1.0f)
+                        val ringSw = (cs * 0.08f).coerceAtLeast(1.5f)
+                        nodes.add(
+                            CircleNode(
+                                cx = cx,
+                                cy = cy,
+                                radius = ringR,
+                                stroke = lineColor,
+                                strokeWidth = ringSw
+                            )
+                        )
+                    }
+                } else {
+                    if (unconsumed[x][y]) {
+                        nodes.add(CircleNode(cx, cy, nodeRadius * clampedLength.coerceIn(0.5f, 1.0f), fill = lineColor))
+                        if (addAccentRings && (x * 19 + y * 23) % 5 == 0) {
+                            val ringR = cs * 0.44f * clampedLength.coerceIn(0.5f, 1.0f)
+                            val ringSw = cs * 0.08f
+                            nodes.add(
+                                CircleNode(
+                                    cx = cx,
+                                    cy = cy,
+                                    radius = ringR,
+                                    stroke = lineColor,
+                                    strokeWidth = ringSw
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return nodes
+    }
+}
