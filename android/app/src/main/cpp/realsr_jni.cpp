@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <vector>
+#include <cstring>
 #include <android/log.h>
 #include "realsr.h"
 
@@ -21,6 +23,9 @@ static jmethodID g_on_progress_method = nullptr;
 
 static jclass g_strip_callback_class = nullptr;
 static jmethodID g_on_strip_method = nullptr;
+
+static jclass g_buffer_class = nullptr;
+static jmethodID g_buffer_clear_method = nullptr;
 
 static bool valid_image_dimensions(jint width, jint height, jint channels) {
     if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
@@ -55,7 +60,37 @@ struct CallbackUserData {
     int channels;
     bool has_exception;
     bool cancelled;
+    bool callback_failed;
+    // One reusable row buffer and one DirectByteBuffer object per inference call.
+    // The native callback copies the current row here before invoking Kotlin.
+    std::vector<unsigned char> row_buffer;
+    jobject row_direct_buffer;
 };
+
+static bool prepare_reusable_row_buffer(
+    JNIEnv* env,
+    CallbackUserData* cb,
+    jint input_width,
+    jint channels,
+    int scale
+) {
+    if (!env || !cb || input_width <= 0 || scale <= 0 ||
+        (channels != 3 && channels != 4)) {
+        return false;
+    }
+    const uint64_t output_width = static_cast<uint64_t>(input_width) *
+        static_cast<uint64_t>(scale);
+    const uint64_t capacity64 = output_width * static_cast<uint64_t>(channels);
+    if (capacity64 == 0 ||
+        capacity64 > static_cast<uint64_t>(std::numeric_limits<jint>::max()) ||
+        capacity64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+        return false;
+    }
+    cb->row_buffer.resize(static_cast<size_t>(capacity64));
+    cb->row_direct_buffer = env->NewDirectByteBuffer(
+        cb->row_buffer.data(), static_cast<jlong>(capacity64));
+    return cb->row_direct_buffer != nullptr;
+}
 
 static int jni_strip_callback(unsigned char* strip_data, int y0, int height, void* user_data) {
     CallbackUserData* cb = static_cast<CallbackUserData*>(user_data);
@@ -93,7 +128,12 @@ static int jni_strip_callback(unsigned char* strip_data, int y0, int height, voi
         cb->cancelled = true;
         return -1; // Keep callback cancellation out of NCNN's status namespace.
     }
-    return ret;
+    if (ret != 0) {
+        cb->callback_failed = true;
+        LOGE("consumer callback failed with status %d", ret);
+        return -1; // Do not misclassify consumer I/O failure as GPU failure.
+    }
+    return 0;
 }
 
 static int jni_row_callback(const unsigned char* row_data, int row_index, int row_width, int channels, void* user_data) {
@@ -112,16 +152,26 @@ static int jni_row_callback(const unsigned char* row_data, int row_index, int ro
         LOGE("Rejected out-of-range output row buffer size");
         return -1;
     }
-    jobject direct_buf = cb->env->NewDirectByteBuffer(
-        const_cast<unsigned char*>(row_data), static_cast<jlong>(capacity64));
-    if (!direct_buf) {
+    if (!cb->row_direct_buffer || cb->row_buffer.size() < capacity64) {
         cb->has_exception = true;
-        LOGE("Failed to allocate DirectByteBuffer for row %d", row_index);
+        LOGE("Reusable DirectByteBuffer is not initialized for row %d", row_index);
         return -1;
     }
+    // Reuse one direct buffer object across all rows. Kotlin consumes it
+    // synchronously before this storage is overwritten for the next row.
+    std::memcpy(cb->row_buffer.data(), row_data, static_cast<size_t>(capacity64));
+    jobject cleared_buffer = cb->env->CallObjectMethod(
+        cb->row_direct_buffer, g_buffer_clear_method
+    );
+    if (cb->env->ExceptionCheck()) {
+        cb->has_exception = true;
+        return -1;
+    }
+    if (cleared_buffer) cb->env->DeleteLocalRef(cleared_buffer);
 
-    jint ret = cb->env->CallIntMethod(cb->row_callback, g_on_row_method, direct_buf, row_index, row_width, channels);
-    cb->env->DeleteLocalRef(direct_buf);
+    jint ret = cb->env->CallIntMethod(
+        cb->row_callback, g_on_row_method, cb->row_direct_buffer, row_index, row_width, channels
+    );
 
     if (cb->env->ExceptionCheck()) {
         cb->has_exception = true;
@@ -132,7 +182,12 @@ static int jni_row_callback(const unsigned char* row_data, int row_index, int ro
         cb->cancelled = true;
         return -1; // Keep callback cancellation out of NCNN's status namespace.
     }
-    return ret;
+    if (ret != 0) {
+        cb->callback_failed = true;
+        LOGE("consumer callback failed with status %d", ret);
+        return -1; // Do not misclassify consumer I/O failure as GPU failure.
+    }
+    return 0;
 }
 
 static int jni_progress_callback(int current_tile, int total_tiles, int percent, void* user_data) {
@@ -281,6 +336,10 @@ static void release_cached_global_refs(JNIEnv* env) {
     if (g_strip_callback_class) env->DeleteGlobalRef(g_strip_callback_class);
     g_strip_callback_class = nullptr;
     g_on_strip_method = nullptr;
+
+    if (g_buffer_class) env->DeleteGlobalRef(g_buffer_class);
+    g_buffer_class = nullptr;
+    g_buffer_clear_method = nullptr;
 }
 
 } // namespace
@@ -323,6 +382,12 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeGlobalInit(JNIEnv* env
                 "onFetchStrip", "(Ljava/nio/ByteBuffer;II)I",
                 &g_strip_callback_class, &g_on_strip_method)) {
             error_code = -3;
+        } else if (!initialize_callback_method(
+                env,
+                "java/nio/Buffer",
+                "clear", "()Ljava/nio/Buffer;",
+                &g_buffer_class, &g_buffer_clear_method)) {
+            error_code = -4;
         }
     } catch (const std::bad_alloc&) {
         LOGE("nativeGlobalInit: out of memory");
@@ -545,6 +610,9 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeLoadModel(
             // The required NCNN Interp layer is unavailable; retrying cannot repair
             // a missing registered layer and would just obscure the installation fault.
             ret = -23;
+        } else if (ret == -9) {
+            // TTA's 8-way streaming transform/merge pipeline is not implemented yet.
+            ret = -24;
         } else if (ret != 0) {
             LOGE("nativeLoadModel: unexpected RealSR load status %d", ret);
             ret = -23;
@@ -601,8 +669,14 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeProcessStreaming(
     udata.w = width;
     udata.channels = channels;
     udata.has_exception = false;
+    udata.cancelled = false;
+    udata.callback_failed = false;
 
     try {
+        if (!prepare_reusable_row_buffer(
+                env, &udata, width, channels, lease.instance->engine->scale)) {
+            return env->ExceptionCheck() ? -12 : -11;
+        }
         const int ret = lease.instance->engine->process_streaming(
             pixeldata, width, height, channels,
             jni_row_callback,
@@ -611,6 +685,7 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeProcessStreaming(
         );
         if (udata.has_exception || env->ExceptionCheck()) return -12; // JNI delivers any pending Java exception to the caller.
         if (udata.cancelled) return -10;
+        if (udata.callback_failed) return -13; // Consumer/storage failure; never trigger GPU fallback.
         if (ret == -100 || ret == -101 || ret == -102) return -11; // NCNN failed to allocate an output/device tensor.
         if (ret != 0) return lease.instance->engine->has_gpu() ? -2 : -4;
         return 0;
@@ -654,8 +729,14 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeProcessStripStreaming(
     udata.w = width;
     udata.channels = channels;
     udata.has_exception = false;
+    udata.cancelled = false;
+    udata.callback_failed = false;
 
     try {
+        if (!prepare_reusable_row_buffer(
+                env, &udata, width, channels, lease.instance->engine->scale)) {
+            return env->ExceptionCheck() ? -12 : -11;
+        }
         const int ret = lease.instance->engine->process_strip_streaming(
             width, height, channels,
             jni_strip_callback,
@@ -665,6 +746,7 @@ Java_com_veilframe_app_upscale_inference_NcnnNative_nativeProcessStripStreaming(
         );
         if (udata.has_exception || env->ExceptionCheck()) return -12; // JNI delivers any pending Java exception to the caller.
         if (udata.cancelled) return -10;
+        if (udata.callback_failed) return -13; // Consumer/storage failure; never trigger GPU fallback.
         if (ret == -100 || ret == -101 || ret == -102) return -11; // NCNN failed to allocate an output/device tensor.
         if (ret != 0) return lease.instance->engine->has_gpu() ? -2 : -4;
         return 0;

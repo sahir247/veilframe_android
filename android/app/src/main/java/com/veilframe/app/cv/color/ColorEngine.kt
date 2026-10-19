@@ -61,7 +61,11 @@ object ColorEngine {
             Core.merge(planes, merged)
             planes.forEach { it.release() }
             return WhiteBalanceResult(
-                corrected = if (source.channels() == 1) toGray(merged) else merged,
+                corrected = when (source.channels()) {
+                    1 -> toGray(merged)
+                    4 -> preserveAlpha(source, merged)
+                    else -> merged
+                },
                 gains = doubleArrayOf(gainB, gainG, gainR),
             ).also { if (merged !== it.corrected) merged.release() }
         } finally {
@@ -73,9 +77,7 @@ object ColorEngine {
     fun exposure(source: Mat, stops: Double): Mat {
         com.veilframe.app.cv.core.CvContracts.requireNonEmpty(source, "source")
         com.veilframe.app.cv.core.CvContracts.requireInRange(stops, -10.0, 10.0, "stops")
-        val out = Mat()
-        source.convertTo(out, -1, Math.pow(2.0, stops), 0.0)
-        return out
+        return transformColorChannels(source, Math.pow(2.0, stops), 0.0)
     }
 
     /** Contrast around mid-grey. 1.0 = unchanged. */
@@ -84,9 +86,7 @@ object ColorEngine {
         com.veilframe.app.cv.core.CvContracts.requireFinite(contrast, "contrast")
         require(contrast >= 0.0) { "contrast must be >= 0.0 (got $contrast)" }
         com.veilframe.app.cv.core.CvContracts.requireFinite(pivot, "pivot")
-        val out = Mat()
-        source.convertTo(out, -1, contrast, pivot * (1.0 - contrast))
-        return out
+        return transformColorChannels(source, contrast, pivot * (1.0 - contrast))
     }
 
     /** Saturation multiplier (0 = grayscale, 1 = unchanged, >1 = boosted) via HSV S. */
@@ -107,6 +107,11 @@ object ColorEngine {
             val out = Mat()
             Imgproc.cvtColor(merged, out, Imgproc.COLOR_HSV2BGR)
             merged.release()
+            if (source.channels() == 4) {
+                val withAlpha = preserveAlpha(source, out)
+                out.release()
+                return withAlpha
+            }
             return out
         } finally {
             if (bgr !== source) bgr.release()
@@ -130,6 +135,11 @@ object ColorEngine {
             planes[1].convertTo(planes[1], -1, 1.0 - 0.25 * tint, 0.0) // G
             val merged = Mat()
             Core.merge(planes, merged)
+            if (source.channels() == 4) {
+                val withAlpha = preserveAlpha(source, merged)
+                merged.release()
+                return withAlpha
+            }
             return merged
         } finally {
             if (bgr !== source) bgr.release()
@@ -168,17 +178,63 @@ object ColorEngine {
                 }
                 lFloat.put(y, 0, buffer)
             }
-            lFloat.convertTo(l, l.type())
+            val lNew = Mat()
+            lFloat.convertTo(lNew, CvType.CV_8UC1)
             lFloat.release()
+            planes[0] = lNew
+            l.release()
             val merged = Mat()
             Core.merge(planes, merged)
             val out = Mat()
             Imgproc.cvtColor(merged, out, Imgproc.COLOR_Lab2BGR)
             merged.release()
+            if (source.channels() == 4) {
+                val withAlpha = preserveAlpha(source, out)
+                out.release()
+                return withAlpha
+            }
             return out
         } finally {
             if (bgr !== source) bgr.release()
             lab.release()
+            planes.forEach { it.release() }
+        }
+    }
+
+    /** Apply exposure/contrast to color channels only; preserve BGRA alpha verbatim. */
+    private fun transformColorChannels(source: Mat, alpha: Double, beta: Double): Mat {
+        if (source.channels() != 4) {
+            val out = Mat()
+            source.convertTo(out, -1, alpha, beta)
+            return out
+        }
+        val planes = ArrayList<Mat>()
+        try {
+            Core.split(source, planes)
+            for (index in 0..2) {
+                planes[index].convertTo(planes[index], -1, alpha, beta)
+            }
+            val out = Mat()
+            Core.merge(planes, out)
+            return out
+        } finally {
+            planes.forEach { it.release() }
+        }
+    }
+
+    /** Reattach the untouched alpha plane to a transformed BGR result. */
+    private fun preserveAlpha(source: Mat, bgr: Mat): Mat {
+        if (source.channels() != 4) return bgr
+        val planes = ArrayList<Mat>(4)
+        try {
+            Core.split(bgr, planes)
+            val alpha = Mat()
+            Core.extractChannel(source, alpha, 3)
+            planes.add(alpha)
+            val out = Mat()
+            Core.merge(planes, out)
+            return out
+        } finally {
             planes.forEach { it.release() }
         }
     }

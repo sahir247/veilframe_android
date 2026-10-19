@@ -472,6 +472,10 @@ class NcnnUpscaleEngine(
                                 NcnnNative.STATUS_INVALID_ARGUMENT -> throw IllegalArgumentException(
                                     "Invalid arguments provided to NCNN model loading"
                                 )
+                                NcnnNative.STATUS_UNSUPPORTED_TTA -> throw NcnnModelLoadException(
+                                    loadRet,
+                                    "NCNN TTA is not supported by the streaming engine yet"
+                                )
                                 else -> throw NcnnModelLoadException(
                                     loadRet,
                                     "Failed to load or initialize NCNN model ${paramFile.name}"
@@ -529,6 +533,8 @@ class NcnnUpscaleEngine(
                                     if (!coroutineContext.isActive) {
                                         1
                                     } else {
+                                        // JNI reuses one direct row buffer; reset its window before each synchronous write.
+                                        rowBuffer.clear()
                                         attemptWriter.writeRow(rowBuffer)
                                         writtenRows++
                                         0
@@ -547,6 +553,10 @@ class NcnnUpscaleEngine(
                                 NcnnNative.STATUS_CALLBACK_EXCEPTION -> throw DeviceInferenceException(
                                     NcnnNative.STATUS_CALLBACK_EXCEPTION,
                                     "JNI callback exception during NCNN processing"
+                                )
+                                NcnnNative.STATUS_CALLBACK_FAILURE -> throw DeviceInferenceException(
+                                    NcnnNative.STATUS_CALLBACK_FAILURE,
+                                    "Output callback or storage write failed during NCNN processing"
                                 )
                                 NcnnNative.STATUS_VULKAN_FAILURE -> throw DeviceInferenceException(
                                     NcnnNative.STATUS_VULKAN_FAILURE,

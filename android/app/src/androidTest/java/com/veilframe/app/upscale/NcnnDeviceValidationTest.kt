@@ -155,6 +155,19 @@ class NcnnDeviceValidationTest {
                 assertTrue("Output file must be non-empty", output.file.length() > 0)
                 NcnnUpscaleEngine.validatePngFile(output.file, expectedW, expectedH)
 
+                if (case.name == "04_children_alpha_transparency_2x") {
+                    val decodedAlpha = BitmapFactory.decodeFile(output.file.absolutePath)
+                    assertNotNull("Transparent test output must decode", decodedAlpha)
+                    try {
+                        val alphaPixels = IntArray(decodedAlpha.width * decodedAlpha.height)
+                        decodedAlpha.getPixels(alphaPixels, 0, decodedAlpha.width, 0, 0, decodedAlpha.width, decodedAlpha.height)
+                        assertTrue("Upscaled RGBA output must preserve transparent pixels", alphaPixels.any { Color.alpha(it) < 250 })
+                        assertTrue("Upscaled RGBA output must preserve opaque pixels", alphaPixels.any { Color.alpha(it) > 250 })
+                    } finally {
+                        decodedAlpha.recycle()
+                    }
+                }
+
                 val outputArtifact = File(artifactsDir, "real_output_gpu_${case.name}.png")
                 output.file.copyTo(outputArtifact, overwrite = true)
                 Log.i(TAG, "Saved real output artifact to ${outputArtifact.absolutePath} (${outputArtifact.length()} bytes)")
@@ -200,6 +213,56 @@ class NcnnDeviceValidationTest {
                 assertEquals("No .part temporary files should leak after cancellation", 0, partFiles.size)
             }
             Log.i(TAG, "Cancellation test successfully verified clean teardown")
+        }
+    }
+
+    @Test
+    fun test05_SmallAndSingleColumnInputs() {
+        runBlocking {
+            Log.i(TAG, "=== SMALL DIMENSION / SINGLE-COLUMN GPU REGRESSION GATE ===")
+            val sizes = listOf(1 to 1, 2 to 3, 63 to 65, 65 to 63, 127 to 129)
+            for ((width, height) in sizes) {
+                val input = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                try {
+                    input.eraseColor(Color.rgb(80, 120, 160))
+                    val output = engine.upscale(
+                        source = BitmapSource(input),
+                        model = UpscaleModelRegistry.NCNN_ANIMEVIDEO_V3_X2,
+                        targetScale = 2,
+                        params = UpscaleInferenceParams(chunkSize = 128, overlap = 16)
+                    ) as UpscaleOutput.Streamed
+                    assertEquals("Output width for ${width}x${height}", width * 2, output.width)
+                    assertEquals("Output height for ${width}x${height}", height * 2, output.height)
+                    assertTrue("Output must exist for ${width}x${height}", output.file.exists())
+                    assertTrue("Output must be non-empty for ${width}x${height}", output.file.length() > 0)
+                    NcnnUpscaleEngine.validatePngFile(output.file, width * 2, height * 2)
+                    val decoded = BitmapFactory.decodeFile(output.file.absolutePath)
+                    assertNotNull("Output must decode for ${width}x${height}", decoded)
+                    try {
+                        val outputPixels = IntArray(decoded.width * decoded.height)
+                        decoded.getPixels(
+                            outputPixels, 0, decoded.width, 0, 0, decoded.width, decoded.height
+                        )
+                        assertTrue(
+                            "Upscale output must not be entirely black for ${width}x${height}",
+                            outputPixels.any { pixel ->
+                                ((pixel ushr 16) and 0xFF) > 2 ||
+                                    ((pixel ushr 8) and 0xFF) > 2 ||
+                                    (pixel and 0xFF) > 2
+                            }
+                        )
+                        assertTrue(
+                            "Opaque input must retain opaque alpha for ${width}x${height}",
+                            outputPixels.any { Color.alpha(it) > 250 }
+                        )
+                    } finally {
+                        decoded.recycle()
+                    }
+                    Log.i(TAG, "Small-image case passed: ${width}x${height} -> ${output.width}x${output.height}")
+                } finally {
+                    input.recycle()
+                }
+            }
         }
     }
 
@@ -283,4 +346,60 @@ class NcnnDeviceValidationTest {
         val model: com.veilframe.app.upscale.model.UpscaleModel,
         val chunkSize: Int = 160
     )
+
+    @Test
+    fun test06_AlphaRampHasNoTileBoundaryDiscontinuity() {
+        runBlocking {
+            val width = 320
+            val height = 64
+            val input = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val pixels = IntArray(width * height) { index ->
+                val x = index % width
+                val alpha = (x * 255) / (width - 1)
+                Color.argb(alpha, 80, 120, 160)
+            }
+            input.setPixels(pixels, 0, width, 0, 0, width, height)
+
+            var outputFile: File? = null
+            try {
+                val output = engine.upscale(
+                    source = BitmapSource(input),
+                    model = UpscaleModelRegistry.NCNN_ANIMEVIDEO_V3_X2,
+                    targetScale = 2,
+                    params = UpscaleInferenceParams(chunkSize = 128, overlap = 16)
+                ) as UpscaleOutput.Streamed
+                outputFile = output.file
+                val decoded = BitmapFactory.decodeFile(output.file.absolutePath)
+                    ?: throw AssertionError("Alpha-ramp output must decode")
+                try {
+                    assertEquals(width * 2, decoded.width)
+                    assertEquals(height * 2, decoded.height)
+                    val y = decoded.height / 2
+                    for (boundary in listOf(128 * 2, 256 * 2)) {
+                        val alpha = (boundary - 4..boundary + 4).map { x ->
+                            Color.alpha(decoded.getPixel(x, y))
+                        }
+                        val maxStep = alpha.zipWithNext().maxOf { (left, right) ->
+                            kotlin.math.abs(right - left)
+                        }
+                        assertTrue(
+                            "Alpha ramp must remain continuous around tile boundary x=$boundary; " +
+                                "samples=$alpha, maxStep=$maxStep",
+                            maxStep <= 3
+                        )
+                        assertTrue(
+                            "Alpha ramp must remain non-decreasing around tile boundary x=$boundary; samples=$alpha",
+                            alpha.zipWithNext().all { (left, right) -> right + 1 >= left }
+                        )
+                    }
+                } finally {
+                    decoded.recycle()
+                }
+            } finally {
+                outputFile?.delete()
+                input.recycle()
+            }
+        }
+    }
+
 }

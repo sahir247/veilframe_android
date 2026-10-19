@@ -17,10 +17,12 @@ object NcnnNative {
     const val STATUS_CANCELLED = -10
     const val STATUS_OUT_OF_MEMORY = -11
     const val STATUS_CALLBACK_EXCEPTION = -12
+    const val STATUS_CALLBACK_FAILURE = -13
     const val STATUS_MODEL_PARAM_FAILURE = -20
     const val STATUS_MODEL_WEIGHTS_FAILURE = -21
     const val STATUS_MODEL_GRAPH_FAILURE = -22
     const val STATUS_MODEL_LAYER_FAILURE = -23
+    const val STATUS_UNSUPPORTED_TTA = -24
 
     private val libraryLoaded: Boolean = try {
         System.loadLibrary("veilframe_ncnn")
@@ -103,6 +105,8 @@ object NcnnNative {
 
     /**
      * Execute tiled super-resolution with direct streaming row output.
+     * The row callback receives a reusable direct buffer, reset before every synchronous
+     * callback; consume its bytes before returning and do not retain it for asynchronous use.
      *
      * @return 0 on completion, non-zero if cancelled or failed.
      */

@@ -54,3 +54,7 @@ scratch/
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
+
+# Audit dumps
+veilframe_*.txt
+*.txt
